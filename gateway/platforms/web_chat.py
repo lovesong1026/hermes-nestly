@@ -1156,12 +1156,14 @@ class WebChatAdapter(BasePlatformAdapter):
                     "path": f"{_UPLOAD_DIR_NAME}/{dest.name}",
                     "size": size,
                 })
-                self._maybe_register_chat_upload(
+                file_id = self._maybe_register_chat_upload(
                     user_id=user_id,
                     storage_key=f"{_UPLOAD_DIR_NAME}/{dest.name}",
                     filename=dest.name,
                     size=size,
                 )
+                if file_id:
+                    saved[-1]["file_id"] = file_id
 
         return web.json_response({"files": saved})
 
@@ -1172,18 +1174,21 @@ class WebChatAdapter(BasePlatformAdapter):
         storage_key: str,
         filename: str,
         size: int,
-    ) -> None:
-        """Bridge chat uploads into platform FileRecord when store supports it."""
+    ) -> Optional[str]:
+        """Bridge chat uploads into platform FileRecord when store supports it.
+
+        Returns the new ``FileRecord.id`` when registration succeeds, else None.
+        """
         store = getattr(self, "_user_store", None)
         if store is None or not hasattr(store, "get_default_workspace"):
-            return
+            return None
         ws = store.get_default_workspace(user_id)
         if not ws:
-            return
+            return None
         try:
             from platform_api.services.file_registry import register_sandbox_file
 
-            register_sandbox_file(
+            rec = register_sandbox_file(
                 workspace_id=ws["id"],
                 storage_key=storage_key,
                 filename=filename,
@@ -1191,6 +1196,7 @@ class WebChatAdapter(BasePlatformAdapter):
                 origin="chat",
                 auto_ingest=False,
             )
+            return str(rec.get("id") or "") or None
         except Exception as exc:
             logger.warning(
                 "[%s] chat upload registry failed user=%s: %s",
@@ -1198,6 +1204,7 @@ class WebChatAdapter(BasePlatformAdapter):
                 user_id,
                 exc,
             )
+            return None
 
     def _resolve_user_preferred_model(self, user_id: str) -> Optional[str]:
         store = getattr(self, "_user_store", None)
@@ -1547,8 +1554,8 @@ class WebChatAdapter(BasePlatformAdapter):
                             self.name,
                             exc_info=True,
                         )
-                    # Memory Center: optional post-turn extraction (feature-flagged
-                    # stub — never writes permanent memory; see memory_extractor).
+                    # Memory Center: optional post-turn extraction (feature-flagged;
+                    # pending only — see memory_extractor).
                     try:
                         from platform_api.services.memory_extractor import (
                             maybe_enqueue_memory_extraction,
@@ -1558,10 +1565,26 @@ class WebChatAdapter(BasePlatformAdapter):
                         if hasattr(self.user_store, "get_default_workspace"):
                             ws = self.user_store.get_default_workspace(user_id)
                         if ws:
+                            assistant_text = (
+                                result.get("final_response")
+                                or result.get("response")
+                                or ""
+                            )
+                            extract_msgs = list(conversation_history or []) + [
+                                {"role": "user", "content": user_message},
+                            ]
+                            if isinstance(assistant_text, str) and assistant_text.strip():
+                                extract_msgs.append(
+                                    {
+                                        "role": "assistant",
+                                        "content": assistant_text,
+                                    }
+                                )
                             maybe_enqueue_memory_extraction(
                                 user_id=user_id,
                                 workspace_id=ws["id"],
                                 session_id=str(effective_session_id),
+                                messages=extract_msgs,
                             )
                     except Exception:
                         logger.debug(

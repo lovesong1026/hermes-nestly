@@ -5,6 +5,10 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from platform_api.middleware_logging import (
+    RequestContextMiddleware,
+    install_request_logging,
+)
 from platform_api.routers import (
     admin,
     auth,
@@ -22,6 +26,8 @@ from platform_api.routers import (
 
 app = FastAPI(title="Hermes Platform API", version="0.1.0")
 
+install_request_logging()
+app.add_middleware(RequestContextMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

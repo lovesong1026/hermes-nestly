@@ -28,6 +28,11 @@ export type UploadedFile = {
   name: string
   path: string
   size: number
+  /** Platform FileRecord id when registered (chat upload / library cite). */
+  fileId?: string
+  mimeType?: string
+  /** Blob / content URL kept for image hover preview on the sent turn. */
+  previewUrl?: string
 }
 
 // ── Stored messages (returned by GET /api/conversations/:id) ────────────
@@ -173,10 +178,21 @@ export const uploads = {
   create: (files: File[]) => {
     const fd = new FormData()
     for (const f of files) fd.append('files', f, f.name)
-    return request<{ files: UploadedFile[] }>(`/api/uploads`, {
+    return request<{
+      files: Array<UploadedFile & { file_id?: string }>
+    }>(`/api/uploads`, {
       method: 'POST',
       body: fd,
-    }).then((r) => r.files)
+    }).then((r) =>
+      r.files.map((f) => ({
+        name: f.name,
+        path: f.path,
+        size: f.size,
+        fileId: f.fileId ?? f.file_id,
+        mimeType: f.mimeType,
+        previewUrl: f.previewUrl,
+      })),
+    )
   },
 }
 

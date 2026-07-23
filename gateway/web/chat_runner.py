@@ -462,6 +462,29 @@ class WebChatAgentRunner:
         from the upstream LLM gateway on every chat turn (see commit
         message for the diagnostic that uncovered this).
         """
+        # Loadtest / CI stub: deterministic reply without calling a real LLM.
+        if os.environ.get("HERMES_WEB_CHAT_FAKE_RUNNER", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }:
+            text = f"[fake] {user_message[:200]}"
+            if stream_delta_callback:
+                try:
+                    stream_delta_callback(text)
+                except Exception:
+                    logger.debug("fake runner stream callback failed", exc_info=True)
+            sid = session_id or f"fake-{uuid.uuid4().hex[:12]}"
+            return (
+                {
+                    "final_response": text,
+                    "response": text,
+                    "session_id": sid,
+                },
+                {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
+            )
+
         loop = asyncio.get_running_loop()
         ctx = contextvars.copy_context()
 

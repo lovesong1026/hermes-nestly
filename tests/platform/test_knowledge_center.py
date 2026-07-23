@@ -70,6 +70,46 @@ def test_create_list_stats_search(client, mock_upstream_key):
     assert any("alpha" in h["content"].lower() for h in hits)
 
 
+def test_create_returns_processing_when_async_queued(
+    client, mock_upstream_key, monkeypatch
+):
+    """With Redis path mocked, create returns immediately as processing."""
+    _uid, wid = _setup(client, mock_upstream_key, email="kb-async@example.com")
+    fid = _upload_txt(client, wid, "async.txt", b"async knowledge index payload")
+
+    monkeypatch.setattr(
+        "platform_api.services.queue.redis_configured",
+        lambda: True,
+    )
+    pushed: list[str] = []
+
+    class _FakeRedis:
+        def rpush(self, key, value):
+            pushed.append(f"{key}:{value}")
+            return 1
+
+    monkeypatch.setattr(
+        "platform_api.services.queue._redis",
+        lambda: _FakeRedis(),
+    )
+
+    created = client.post(
+        f"/api/v1/workspaces/{wid}/knowledge-bases",
+        json={"name": "Async KB", "file_ids": [fid]},
+    )
+    assert created.status_code == 200, created.text
+    kb = created.json()
+    assert kb["status"] == "processing"
+    assert any("hermes:knowledge_index" in p for p in pushed)
+
+    # Worker-side run finishes the job
+    from platform_api.services.knowledge_center import run_knowledge_index
+
+    detail = run_knowledge_index(knowledge_id=kb["id"], user_id=_uid)
+    assert detail["status"] == "ready"
+    assert detail["chunk_count"] >= 1
+
+
 def test_delete_knowledge_keeps_file(client, mock_upstream_key):
     user_id, wid = _setup(client, mock_upstream_key, email="keep@example.com")
     fid = _upload_txt(client, wid, "keep.txt", b"Keep this file on disk forever")

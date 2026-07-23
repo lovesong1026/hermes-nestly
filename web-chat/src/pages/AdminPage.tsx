@@ -86,9 +86,14 @@ export function AdminPage() {
     <div className="panel-page">
       <div className="admin-header">
         <h2>{t('nav.admin')}</h2>
-        <a className="link-btn" href={routeHref('admin-audit')}>
-          {t('admin.auditLink')}
-        </a>
+        <div className="admin-header-links">
+          <a className="link-btn" href={routeHref('admin-skills')}>
+            {t('admin.skillsLink')}
+          </a>
+          <a className="link-btn" href={routeHref('admin-audit')}>
+            {t('admin.auditLink')}
+          </a>
+        </div>
       </div>
       {stats && (
         <p className="admin-stats">

@@ -200,6 +200,7 @@ export function FilesPage() {
 
   const storeUploadRef = useRef<HTMLInputElement>(null)
   const ingestUploadRef = useRef<HTMLInputElement>(null)
+  const [dragOver, setDragOver] = useState(false)
 
   const folderTree = useMemo(() => flattenFolderTree(folders), [folders])
 
@@ -717,7 +718,35 @@ export function FilesPage() {
         }}
       />
 
-      <div className="files-main">
+      <div
+        className={cn('files-main', dragOver && 'files-main--dragover')}
+        onDragEnter={(e) => {
+          e.preventDefault()
+          if (e.dataTransfer.types.includes('Files')) setDragOver(true)
+        }}
+        onDragOver={(e) => {
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'copy'
+        }}
+        onDragLeave={(e) => {
+          if (e.currentTarget.contains(e.relatedTarget as Node)) return
+          setDragOver(false)
+        }}
+        onDrop={(e) => {
+          e.preventDefault()
+          setDragOver(false)
+          const list = e.dataTransfer.files
+          if (!list?.length || busy) return
+          // Default: store only; hold Alt/Option to also enqueue RAG ingest
+          const ingest = e.altKey
+          void onUpload(list, ingest)
+        }}
+      >
+        {dragOver ? (
+          <p className="files-drop-hint" role="status">
+            {t('files.dropHint')}
+          </p>
+        ) : null}
         <div className="files-toolbar">
           <Breadcrumb>
             <BreadcrumbList>

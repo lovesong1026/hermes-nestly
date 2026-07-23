@@ -25,12 +25,29 @@ export function isWorkspaceFilePreviewable(name: string): boolean {
 /** Resolve drawer body kind for a workspace file name. */
 export function workspacePreviewKind(
   name: string,
+  opts?: { mimeType?: string | null; path?: string | null },
 ): 'image' | 'pdf' | 'md' | null {
-  if (isImageAttachmentName(name)) return 'image'
+  if (isImageAttachment(name, opts)) return 'image'
   const lower = name.toLowerCase()
   if (lower.endsWith('.pdf')) return 'pdf'
   if (lower.endsWith('.md')) return 'md'
   return null
+}
+
+/**
+ * Chat / composer chip: open right Drawer when we have a FileRecord id and
+ * the file is an image or md/pdf (mime/path used for opaque upload names).
+ */
+export function canOpenAttachmentDrawer(
+  name: string,
+  opts?: {
+    fileId?: string | null
+    mimeType?: string | null
+    path?: string | null
+  },
+): boolean {
+  if (!opts?.fileId) return false
+  return workspacePreviewKind(name, opts) !== null
 }
 
 /** Detect images by mime type, display name, or storage path extension. */

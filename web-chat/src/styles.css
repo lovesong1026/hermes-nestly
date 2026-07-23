@@ -1682,6 +1682,14 @@ code {
   padding: 0;
 }
 
+/* 用户消息：附件条与气泡同侧右对齐 */
+.attach-strip--end {
+  justify-content: flex-end;
+  align-self: flex-end;
+  width: auto;
+  max-width: 100%;
+}
+
 .attach-chip {
   display: inline-flex;
   align-items: center;
@@ -1720,6 +1728,12 @@ code {
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
   pointer-events: none;
+}
+
+/* 右对齐条上的芯片：预览锚定右侧，避免溢出视口 */
+.attach-strip--end .attach-preview {
+  left: auto;
+  right: 0;
 }
 
 .attach-chip--image:hover .attach-preview {
@@ -2331,6 +2345,19 @@ code {
   margin: 0;
 }
 
+.admin-header-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.admin-path-cell {
+  font-size: 0.85rem;
+  word-break: break-all;
+  opacity: 0.85;
+}
+
 .admin-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -2795,6 +2822,52 @@ code {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+/* Knowledge Center list cards — breathe between title / meta / actions */
+.knowledge-item {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+}
+
+.knowledge-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.knowledge-item-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+}
+
+.knowledge-item-name {
+  font-size: 1.05rem;
+  line-height: 1.35;
+  margin-inline-end: 2px;
+}
+
+.knowledge-item-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.knowledge-item-desc,
+.knowledge-item-meta {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.knowledge-item-actions {
+  gap: 10px;
+  padding-top: 2px;
 }
 
 .skill-stats {
@@ -3377,6 +3450,22 @@ code {
 
 .files-main {
   min-width: 0;
+  position: relative;
+  border-radius: 10px;
+  transition: box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.files-main--dragover {
+  box-shadow: inset 0 0 0 2px var(--color-primary, #3b82f6);
+  background: color-mix(in srgb, var(--color-primary, #3b82f6) 8%, transparent);
+}
+
+.files-drop-hint {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  text-align: center;
+  font-size: 0.9rem;
+  opacity: 0.9;
 }
 
 .files-filter,

@@ -2,9 +2,10 @@ import type { UploadedFile } from '../api'
 import { formatBytes } from '../format'
 import { useT } from '../i18n'
 import {
-  isDrawerPreviewableName,
+  canOpenAttachmentDrawer,
   isImageAttachment,
 } from '../attachmentPreview'
+import { cn } from '@/lib/utils'
 
 export { isImageAttachmentName, isDrawerPreviewableName } from '../attachmentPreview'
 
@@ -26,8 +27,23 @@ export type PendingAttachment = {
 type PendingProps = {
   items: PendingAttachment[]
   onRemove: (id: string) => void
-  /** Called when user clicks an md/pdf chip that has a fileId. */
+  /** Called when user clicks a previewable chip that has a fileId. */
   onPreviewDoc?: (item: PendingAttachment) => void
+}
+
+type SentPreviewTarget = {
+  name: string
+  fileId: string
+  mimeType?: string
+  path?: string
+}
+
+type AttachmentListProps = {
+  items: UploadedFile[]
+  /** User turns align chips with the message bubble (end). */
+  align?: 'start' | 'end'
+  /** Image / md / pdf with fileId → open FilePreviewDrawer. */
+  onPreviewDoc?: (item: SentPreviewTarget) => void
 }
 
 /** Editable attachment strip shown above the composer textarea. */
@@ -47,8 +63,11 @@ export function PendingAttachments({
             mimeType: a.mimeType,
             path: a.path,
           })
-        const canDrawerPreview =
-          Boolean(a.fileId) && isDrawerPreviewableName(a.name)
+        const canDrawerPreview = canOpenAttachmentDrawer(a.name, {
+          fileId: a.fileId,
+          mimeType: a.mimeType,
+          path: a.path,
+        })
         return (
           <span
             key={a.id}
@@ -115,19 +134,88 @@ export function PendingAttachments({
 }
 
 /** Read-only attachment chips rendered on a sent user turn. */
-export function AttachmentList({ items }: { items: UploadedFile[] }) {
+export function AttachmentList({
+  items,
+  align = 'start',
+  onPreviewDoc,
+}: AttachmentListProps) {
+  const t = useT()
   if (!items || items.length === 0) return null
   return (
-    <div className="attach-strip attach-strip-readonly">
-      {items.map((a, i) => (
-        <span key={i} className="attach-chip attach-done" title={a.path}>
-          <span className="attach-icon" aria-hidden>
-            📎
+    <div
+      data-slot="attachment-list"
+      className={cn(
+        'attach-strip attach-strip-readonly',
+        align === 'end' && 'attach-strip--end',
+      )}
+    >
+      {items.map((a, i) => {
+        const showImagePreview =
+          Boolean(a.previewUrl) &&
+          isImageAttachment(a.name, {
+            mimeType: a.mimeType,
+            path: a.path,
+          })
+        const canDrawerPreview = canOpenAttachmentDrawer(a.name, {
+          fileId: a.fileId,
+          mimeType: a.mimeType,
+          path: a.path,
+        })
+        return (
+          <span
+            key={`${a.path}-${i}`}
+            className={cn(
+              'attach-chip attach-done',
+              showImagePreview && 'attach-chip--image',
+              canDrawerPreview && 'attach-chip--doc',
+            )}
+            title={
+              canDrawerPreview ? t('attach.preview.clickHint') : a.name
+            }
+          >
+            {showImagePreview && (
+              <span className="attach-preview" aria-hidden>
+                <img
+                  className="attach-preview-img"
+                  src={a.previewUrl}
+                  alt=""
+                />
+              </span>
+            )}
+            {showImagePreview ? (
+              <img
+                className="attach-chip-thumb"
+                src={a.previewUrl}
+                alt=""
+                aria-hidden
+              />
+            ) : (
+              <span className="attach-icon" aria-hidden>
+                📎
+              </span>
+            )}
+            {canDrawerPreview && a.fileId ? (
+              <button
+                type="button"
+                className="attach-name attach-name--preview"
+                onClick={() =>
+                  onPreviewDoc?.({
+                    name: a.name,
+                    fileId: a.fileId!,
+                    mimeType: a.mimeType,
+                    path: a.path,
+                  })
+                }
+              >
+                {a.name}
+              </button>
+            ) : (
+              <span className="attach-name">{a.name}</span>
+            )}
+            <span className="attach-size">{formatBytes(a.size)}</span>
           </span>
-          <span className="attach-name">{a.name}</span>
-          <span className="attach-size">{formatBytes(a.size)}</span>
-        </span>
-      ))}
+        )
+      })}
     </div>
   )
 }

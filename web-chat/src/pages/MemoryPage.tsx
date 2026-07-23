@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
+import { MarkdownEditor } from '../components/MarkdownEditor'
 import { PageShell } from '../components/PageShell'
 import { useT } from '../i18n'
 import {
@@ -406,12 +407,13 @@ export function MemoryPage() {
           </label>
           <label className="memory-field">
             <span>{t('memory.field.content')}</span>
-            <textarea
-              className="memory-textarea"
-              rows={5}
+            <MarkdownEditor
               value={draftContent}
-              onChange={(e) => setDraftContent(e.target.value)}
-              aria-label={t('memory.field.content')}
+              onChange={setDraftContent}
+              minHeight={220}
+              editLabel={t('memory.edit')}
+              previewLabel={t('memory.preview')}
+              className="memory-md-editor"
             />
           </label>
           <DialogFooter>

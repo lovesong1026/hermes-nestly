@@ -12,6 +12,8 @@ logger = logging.getLogger("hermes.platform.queue")
 
 INGEST_QUEUE = "hermes:ingest"
 INGEST_DLQ = "hermes:ingest:dlq"
+KNOWLEDGE_QUEUE = "hermes:knowledge_index"
+KNOWLEDGE_DLQ = "hermes:knowledge_index:dlq"
 MAX_ATTEMPTS = 3
 
 
@@ -92,3 +94,69 @@ def dlq_length() -> int:
     if not redis_configured():
         return 0
     return int(_redis().llen(INGEST_DLQ) or 0)
+
+
+def enqueue_knowledge_index(
+    *,
+    knowledge_id: str,
+    user_id: str,
+    workspace_id: str,
+    attempt: int = 0,
+) -> dict[str, Any]:
+    """Enqueue knowledge indexing, or run synchronously when Redis is unavailable."""
+    payload = {
+        "job_type": "knowledge_index",
+        "knowledge_id": knowledge_id,
+        "user_id": user_id,
+        "workspace_id": workspace_id,
+        "attempt": int(attempt),
+        "enqueued_at": time.time(),
+    }
+    if not redis_configured():
+        from platform_api.services.knowledge_center import run_knowledge_index
+
+        logger.debug("REDIS_URL unset — sync knowledge index id=%s", knowledge_id)
+        detail = run_knowledge_index(knowledge_id=knowledge_id, user_id=user_id)
+        return {"mode": "sync", "detail": detail, **payload}
+
+    client = _redis()
+    client.rpush(KNOWLEDGE_QUEUE, json.dumps(payload))
+    return {"mode": "async", **payload}
+
+
+def brpop_platform_job(timeout: int = 5) -> Optional[dict[str, Any]]:
+    """Blocking pop from ingest or knowledge queues. Returns None on timeout."""
+    if not redis_configured():
+        return None
+    client = _redis()
+    item = client.brpop([INGEST_QUEUE, KNOWLEDGE_QUEUE], timeout=timeout)
+    if not item:
+        return None
+    queue_name, raw = item
+    job = json.loads(raw)
+    if queue_name == KNOWLEDGE_QUEUE:
+        job.setdefault("job_type", "knowledge_index")
+    else:
+        job.setdefault("job_type", "ingest")
+    return job
+
+
+def requeue_or_deadletter_knowledge(job: dict[str, Any], *, error: str) -> str:
+    attempt = int(job.get("attempt") or 0) + 1
+    job = {**job, "attempt": attempt, "last_error": error[:500]}
+    if not redis_configured():
+        return "sync"
+    client = _redis()
+    if attempt >= MAX_ATTEMPTS:
+        client.rpush(KNOWLEDGE_DLQ, json.dumps(job))
+        logger.warning(
+            "knowledge DLQ id=%s attempts=%s err=%s",
+            job.get("knowledge_id"),
+            attempt,
+            error[:200],
+        )
+        return "dlq"
+    delay = min(2 ** attempt, 30)
+    time.sleep(delay)
+    client.rpush(KNOWLEDGE_QUEUE, json.dumps(job))
+    return "retry"

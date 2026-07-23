@@ -98,4 +98,30 @@ describe('ChatTurnBubble', () => {
     wrap(<ChatTurnBubble turn={turn} onRetry={() => undefined} />)
     expect(screen.getByRole('button', { name: /sources|来源/i })).toBeTruthy()
   })
+
+  it('shows user attachment chips right-aligned with message', () => {
+    const turn: Turn = {
+      id: 'u-attach',
+      role: 'user',
+      status: 'done',
+      activity: [],
+      segments: [{ kind: 'text', text: '看这张图' }],
+      attachments: [
+        {
+          name: 'a.png',
+          path: 'uploads/a.png',
+          size: 12,
+          previewUrl: 'blob:http://localhost/a',
+        },
+      ],
+    }
+    const { container } = wrap(<ChatTurnBubble turn={turn} />)
+    const strip = container.querySelector('.attach-strip-readonly')
+    expect(strip).toBeTruthy()
+    expect(strip?.className).toContain('attach-strip--end')
+    expect(container.querySelector('[data-slot="message"]')).toHaveAttribute(
+      'data-align',
+      'end',
+    )
+  })
 })

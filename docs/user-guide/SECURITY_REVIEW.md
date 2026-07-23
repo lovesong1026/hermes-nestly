@@ -21,14 +21,15 @@
 **备注 / 证据链接**：
 
 ```
-_________________________________________________________________
+scripts/run_tests.sh tests/platform/test_cookie_secure.py
+scripts/verify-https-cookies.sh https://<域名>
 ```
 
 ---
 
 ## 2. 越权 / 多租户隔离
 
-- [ ] 所有触及用户文件 / memory / skills / knowledge 的路径在 `enter_user_context(user_id)` 内执行。
+- [ ] 所有触及用户文件 / memory / skills / conversation 的路径在 `enter_user_context(user_id)` 内执行。
 - [ ] Workspace API 校验归属：用户 A 无法读写用户 B 的 `workspace_id`。
 - [ ] 文件 `storage_key` 沙箱：本地 `confine_path`；MinIO `s3://` key 必须落在本 workspace 前缀下。
 - [ ] Admin API（`/api/v1/admin/*`）对非 admin 返回 **403**。
@@ -39,7 +40,8 @@ _________________________________________________________________
 **备注 / 证据链接**：
 
 ```
-_________________________________________________________________
+scripts/run_tests.sh tests/platform/test_isolation.py tests/platform/test_isolation_extended.py
+scripts/run_tests.sh tests/gateway/test_web_sandbox.py tests/platform/test_storage_key_sandbox.py
 ```
 
 ---
@@ -55,7 +57,7 @@ _________________________________________________________________
 **备注 / 证据链接**：
 
 ```
-_________________________________________________________________
+gateway/web/key_storage.py · scripts/backup-platform.sh · docs/user-guide/platform-saas.md
 ```
 
 ---
@@ -70,7 +72,9 @@ _________________________________________________________________
 **审计记录**（日期 / 命令 / 结果摘要）：
 
 ```
-_________________________________________________________________
+uv pip audit
+cd web-chat && npm audit --omit=dev
+（粘贴日期与摘要）
 ```
 
 ---
@@ -81,11 +85,14 @@ _________________________________________________________________
 - [ ] Platform 深度健康：`GET /api/v1/healthz` 返回 `checks.database` / `redis` / `object_store`；生产监控告警 503 / `degraded`。
 - [ ] Gateway：`GET /api/healthz` 存活探测纳入监控。
 - [ ] 可选：已跑 [deploy/loadtest](../../deploy/loadtest/README.md) 10 VU 基线，阈值通过。
+- [ ] 可选：已跑 50 VU SSE（`k6-chat-sse.js` + `HERMES_WEB_CHAT_FAKE_RUNNER=1`），报告归档。
 
 **备注 / 证据链接**：
 
 ```
-_________________________________________________________________
+scripts/run_tests.sh tests/platform/test_healthz.py tests/platform/test_request_id.py
+deploy/loadtest/README.md · k6-platform.js · k6-chat-sse.js
+.github/workflows/tests.yml (platform-saas) · compose-smoke.yml
 ```
 
 ---
@@ -119,4 +126,4 @@ _________________________________________________________________
 
 - [DEPLOY.md](DEPLOY.md) — VPS 部署与运维速查
 - [platform-saas.md](platform-saas.md) — 架构与认证
-- [deploy/loadtest/README.md](../../deploy/loadtest/README.md) — k6 10 VU 基线
+- [deploy/loadtest/README.md](../../deploy/loadtest/README.md) — k6 10 VU 基线 + 50 VU SSE

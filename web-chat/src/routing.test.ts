@@ -29,6 +29,7 @@ describe('routing', () => {
     expect(parseRoute('#/usage')).toBe('usage')
     expect(parseRoute('#/admin')).toBe('admin')
     expect(parseRoute('#/admin/audit')).toBe('admin-audit')
+    expect(parseRoute('#/admin/skills')).toBe('admin-skills')
     expect(parseRoute('#/reset-password')).toBe('reset-password')
     expect(parseRoute('#/reset-password?token=abc')).toBe('reset-password')
     expect(parseRoute('#/chat')).toBe('chat')
@@ -57,6 +58,7 @@ describe('routing', () => {
     expect(routeHref('settings')).toBe('#/settings')
     expect(routeHref('file-tags')).toBe('#/file-tags')
     expect(routeHref('admin-audit')).toBe('#/admin/audit')
+    expect(routeHref('admin-skills')).toBe('#/admin/skills')
     expect(routeHref('share', 'tok_1')).toBe('#/share/tok_1')
   })
 
@@ -66,6 +68,7 @@ describe('routing', () => {
     expect(isWorkspaceRoute('chat')).toBe(false)
     expect(isAdminRoute('admin')).toBe(true)
     expect(isAdminRoute('admin-audit')).toBe(true)
+    expect(isAdminRoute('admin-skills')).toBe(true)
     expect(isAdminRoute('chat')).toBe(false)
     expect(mainTabFromRoute('skills')).toBe('workspace')
     expect(mainTabFromRoute('file-tags')).toBe('workspace')

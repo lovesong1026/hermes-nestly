@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import json
 import logging
+import mimetypes
 from pathlib import Path
 from typing import Any, Callable, Dict
 
@@ -54,6 +55,103 @@ _TOOLSET = "web_file"
 # Office/PDF: upstream read_file_tool rejects these as binary; extract text instead.
 _EXTRACTABLE_SUFFIXES = frozenset({".pdf", ".docx", ".xlsx", ".pptx"})
 _MAX_EXTRACT_CHARS = 100_000
+
+# Mirror platform Files UI upload allow-list (see platform_api/routers/files.py).
+_REGISTRY_DOC_SUFFIXES = frozenset({".pdf", ".docx", ".xlsx", ".pptx", ".txt", ".md"})
+_REGISTRY_IMAGE_SUFFIXES = frozenset(
+    {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
+)
+_REGISTRY_SUFFIXES = _REGISTRY_DOC_SUFFIXES | _REGISTRY_IMAGE_SUFFIXES
+# Only user-document areas — not memories/skills/cache or root identity files.
+_REGISTRY_TOP_DIRS = frozenset({"files", "uploads"})
+
+
+def _tool_result_ok(result: str) -> bool:
+    """True when an upstream tool JSON/string indicates success."""
+    try:
+        data = json.loads(result)
+    except (json.JSONDecodeError, TypeError):
+        return bool(result) and "error" not in result.lower()
+    if not isinstance(data, dict):
+        return True
+    if data.get("success") is False:
+        return False
+    if data.get("error"):
+        return False
+    return True
+
+
+def _storage_key_for_registry(confined_abs: str) -> str | None:
+    """Return workspace-relative POSIX key if the path should appear in Files UI."""
+    from gateway.web.sandbox import get_user_workspace
+
+    ws = get_user_workspace()
+    if ws is None:
+        return None
+    try:
+        rel = Path(confined_abs).resolve().relative_to(ws.resolve())
+    except (ValueError, OSError):
+        return None
+    parts = rel.parts
+    if not parts or parts[0] not in _REGISTRY_TOP_DIRS:
+        return None
+    if Path(parts[-1]).suffix.lower() not in _REGISTRY_SUFFIXES:
+        return None
+    return rel.as_posix()
+
+
+def _maybe_register_agent_file(confined_abs: str, *, tool_result: str) -> None:
+    """Best-effort: register ``files/`` / ``uploads/`` writes into platform Files.
+
+    Failures are logged only — never fail the tool result (same posture as
+    chat upload bridge in ``web_chat._maybe_register_chat_upload``).
+    """
+    if not _tool_result_ok(tool_result):
+        return
+    storage_key = _storage_key_for_registry(confined_abs)
+    if not storage_key:
+        return
+    path = Path(confined_abs)
+    if not path.is_file():
+        return
+
+    try:
+        from gateway.web.platform.store import PlatformStore
+        from gateway.web.user_store_factory import create_user_store
+        from platform_api.services.file_registry import upsert_sandbox_file
+    except ImportError:
+        return
+
+    try:
+        store = create_user_store()
+        if not isinstance(store, PlatformStore):
+            return
+        from gateway.web.sandbox import get_user_workspace
+
+        ws_path = get_user_workspace()
+        if ws_path is None:
+            return
+        user_id = ws_path.name
+        ws = store.get_default_workspace(user_id)
+        if not ws:
+            return
+
+        mime, _ = mimetypes.guess_type(path.name)
+        upsert_sandbox_file(
+            workspace_id=ws["id"],
+            storage_key=storage_key,
+            filename=path.name,
+            size_bytes=path.stat().st_size,
+            mime_type=mime,
+            origin="agent",
+            auto_ingest=False,
+        )
+    except Exception as exc:
+        logger.warning(
+            "agent file registry failed path=%s: %s",
+            storage_key,
+            exc,
+        )
 
 
 def _confine_or_error(path: str) -> "str | Dict[str, Any]":
@@ -215,11 +313,13 @@ def _handle_web_file_write(args: Dict[str, Any], **kw: Any) -> str:
     if isinstance(confined, dict):
         return _json_or_passthrough(confined)
 
-    return write_file_tool(
+    result = write_file_tool(
         path=confined,
         content=args["content"],
         task_id=kw.get("task_id") or "default",
     )
+    _maybe_register_agent_file(confined, tool_result=result)
+    return result
 
 
 def _handle_web_file_patch(args: Dict[str, Any], **kw: Any) -> str:
@@ -235,7 +335,7 @@ def _handle_web_file_patch(args: Dict[str, Any], **kw: Any) -> str:
         confined = _confine_or_error(path)
         if isinstance(confined, dict):
             return _json_or_passthrough(confined)
-        return patch_tool(
+        result = patch_tool(
             mode="replace",
             path=confined,
             old_string=args.get("old_string"),
@@ -243,6 +343,8 @@ def _handle_web_file_patch(args: Dict[str, Any], **kw: Any) -> str:
             replace_all=args.get("replace_all", False),
             task_id=kw.get("task_id") or "default",
         )
+        _maybe_register_agent_file(confined, tool_result=result)
+        return result
 
     if mode == "patch":
         # V4A multi-file patch — we can't trivially confine every

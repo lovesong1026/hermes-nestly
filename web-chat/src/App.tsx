@@ -11,6 +11,7 @@ import { SkillsPage } from './pages/SkillsPage'
 import { UsagePage } from './pages/UsagePage'
 import { AdminPage } from './pages/AdminPage'
 import { AdminAuditPage } from './pages/AdminAuditPage'
+import { AdminSkillsPage } from './pages/AdminSkillsPage'
 import { SharePage } from './pages/SharePage'
 import { AccountMenu } from './components/AccountMenu'
 import { MainNavMenu } from './components/MainNavMenu'
@@ -303,6 +304,9 @@ function AppShell() {
               {pageRoute === 'admin' && <AdminPage key={`admin-${pageKey}`} />}
               {pageRoute === 'admin-audit' && (
                 <AdminAuditPage key={`admin-audit-${pageKey}`} />
+              )}
+              {pageRoute === 'admin-skills' && (
+                <AdminSkillsPage key={`admin-skills-${pageKey}`} />
               )}
             </div>
             <SettingsPage
