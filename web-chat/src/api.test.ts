@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiError, auth, conversations, streamChat } from './api'
+import { setPlatformUnauthorizedRedirect } from './authRedirect'
 
 function jsonResponse(body: unknown, init: ResponseInit = {}) {
   return new Response(JSON.stringify(body), {
@@ -12,6 +13,8 @@ function jsonResponse(body: unknown, init: ResponseInit = {}) {
 describe('api request wrapper', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+    setPlatformUnauthorizedRedirect(false)
+    window.location.hash = ''
   })
 
   it('auth.login posts api_key', async () => {
@@ -44,6 +47,34 @@ describe('api request wrapper', () => {
       status: 401,
       code: 'invalid_key',
     } satisfies Partial<ApiError>)
+  })
+
+  it('redirects to #/auth on gateway 401 when platform mode enabled', async () => {
+    setPlatformUnauthorizedRedirect(true)
+    window.location.hash = '#/chat'
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({ error: 'expired', code: 'session_expired' }, { status: 401 }),
+      ),
+    )
+
+    await expect(auth.me()).rejects.toMatchObject({ status: 401 })
+    expect(window.location.hash).toBe('#/auth')
+  })
+
+  it('does not redirect gateway 401 in legacy mode', async () => {
+    setPlatformUnauthorizedRedirect(false)
+    window.location.hash = '#/chat'
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({ error: 'nope', code: 'unauthorized' }, { status: 401 }),
+      ),
+    )
+
+    await expect(auth.me()).rejects.toMatchObject({ status: 401 })
+    expect(window.location.hash).toBe('#/chat')
   })
 
   it('conversations.list builds query string', async () => {

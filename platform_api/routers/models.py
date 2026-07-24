@@ -182,12 +182,19 @@ def _read_preferences(ws: Workspace) -> dict[str, Any]:
 
 
 def _gateway_default_model() -> str:
+    """Platform fallback when the user has no preferred_model yet."""
+    env_default = (os.environ.get("PLATFORM_DEFAULT_MODEL") or "").strip()
+    if env_default:
+        return env_default
     try:
         from gateway.run import _resolve_gateway_model
 
-        return (_resolve_gateway_model() or "").strip()
+        resolved = (_resolve_gateway_model() or "").strip()
+        if resolved:
+            return resolved
     except Exception:
-        return ""
+        pass
+    return "gpt-5.6-sol"
 
 
 def _get_workspace(workspace_id: str, user_id: str) -> Workspace:

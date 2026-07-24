@@ -1,6 +1,11 @@
 // API client for the web_chat gateway adapter.
 import { parseSseFrame } from './sse'
 import type { ChatEvent, ChatMessage } from './chatEvents'
+import {
+  handleUnauthorizedRedirect,
+  isGatewayAuthExemptPath,
+  shouldRedirectGatewayUnauthorized,
+} from './authRedirect'
 export type { ChatEvent, ChatMessage } from './chatEvents'
 
 export type User = {
@@ -119,6 +124,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       body = await res.json()
     } catch {
       // Non-JSON error response — keep the empty body.
+    }
+    if (
+      res.status === 401 &&
+      shouldRedirectGatewayUnauthorized() &&
+      !isGatewayAuthExemptPath(path)
+    ) {
+      handleUnauthorizedRedirect()
     }
     throw new ApiError(body.error ?? res.statusText, res.status, body.code)
   }
@@ -258,11 +270,18 @@ export async function* streamChat(
     } catch {
       // ignore
     }
-    // Surface 401 with a distinct code so the UI can open the key modal.
+    // Surface 401 with a distinct code so the UI can open the key modal
+    // (legacy) or redirect to `#/auth` (platform mode).
     const code =
       body.code ??
       (res.status === 401 ? 'unauthorized' : undefined) ??
       undefined
+    if (
+      res.status === 401 &&
+      shouldRedirectGatewayUnauthorized()
+    ) {
+      handleUnauthorizedRedirect()
+    }
     yield {
       type: 'error',
       message: body.error ?? `HTTP ${res.status}`,

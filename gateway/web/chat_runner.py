@@ -174,10 +174,10 @@ _WEB_PLATFORM_PROMPT_ADDENDUM = """\
 [hermes-multiuser-web-service platform notes]
 
 You are running inside a multi-user web service.  Every request is bound to
-one authenticated user with a private workspace at ``<workspace>/skills/``.
-That workspace overlays the operator-curated global library at
-``$HERMES_HOME/skills/``; the user can see both, but can only write to their
-own.
+one authenticated user with a private workspace (skills live under
+``skills/`` relative to that workspace). That workspace overlays the
+operator-curated global skill library; the user can see both, but can only
+write to their own.
 
 Per-user skill tools (use these instead of ``skill_*`` — those upstream tools
 are intentionally absent here):
@@ -206,8 +206,8 @@ violated them and the user lost trust):
    don't route around it through the user.
 2. **Installs ALWAYS land in *this user's private skills directory*.**
    They are not visible to other users and they are not in the global
-   library.  You cannot install into ``$HERMES_HOME/skills/`` from chat —
-   that is an operator-side action, out of scope for you.
+   library.  You cannot install into the operator global skills library
+   from chat — that is an operator-side action, out of scope for you.
 3. **If ``web_skill_install`` returns an error** (bad frontmatter, name
    collision, size cap, invalid category), surface the tool's error to the
    user verbatim and offer to fix the input.  Do NOT fall back to
@@ -252,9 +252,9 @@ or "attached" an image without including its Markdown link.
 def _workspace_runtime_prompt(*, workspace: Any, model: str) -> str:
     """Per-request facts the model must not invent from MEMORY.md / SOUL.md.
 
-    ``workspace`` is the absolute path of the active user sandbox (bound by
-    ``enter_user_context``).  File tools (``web_file_*``) are confined there;
-    the process CWD of the gateway is never the user's working directory.
+    ``workspace`` is the absolute sandbox path (bound by ``enter_user_context``)
+    but is **never** echoed into the prompt — host paths must not reach the
+    model or the user.  File tools resolve relative keys from that root.
     """
     lines = [
         "[hermes-multiuser-web-service runtime]",
@@ -263,18 +263,21 @@ def _workspace_runtime_prompt(*, workspace: Any, model: str) -> str:
         "do not invent a different model from memory or identity files.",
     ]
     if workspace is not None:
-        ws = str(workspace)
         lines.extend(
             [
-                f"User workspace root (your only working directory): {ws}",
-                "All file reads/writes/searches must use paths under this "
-                "workspace via ``web_file_read`` / ``web_file_write`` / "
-                "``web_file_patch`` / ``web_file_search``.  Relative paths "
-                "resolve from the workspace root (e.g. ``uploads/data.csv``, "
-                "``files/notes.md``).  ``web_file_read`` extracts text from "
-                "PDF and Office documents (``.pdf``, ``.docx``, ``.xlsx``, "
-                "``.pptx``) after sandbox confinement.  Never claim the gateway "
-                "process CWD or the hermes-agent checkout is the user's directory.",
+                "User workspace root is the virtual directory ``.`` "
+                "(your only working directory). Never invent, ask for, or "
+                "echo absolute host filesystem paths "
+                "(for example ``/Users/…``, ``/home/…``, ``/var/…``, "
+                "or Windows drive letters).",
+                "All file reads/writes/searches must use workspace-relative "
+                "paths via ``web_file_read`` / ``web_file_write`` / "
+                "``web_file_patch`` / ``web_file_search`` "
+                "(e.g. ``uploads/data.csv``, ``files/notes.md``). "
+                "``web_file_read`` extracts text from PDF and Office "
+                "documents (``.pdf``, ``.docx``, ``.xlsx``, ``.pptx``) "
+                "after sandbox confinement. Never claim the gateway process "
+                "CWD or the hermes-agent checkout is the user's directory.",
             ]
         )
     return "\n".join(lines)

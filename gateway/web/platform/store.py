@@ -467,6 +467,31 @@ class PlatformStore:
             user.password_hash = hash_password(new_password)
             user.last_seen_at = datetime.now(timezone.utc)
 
+    def revoke_all_sessions(self, user_id: str) -> int:
+        """Delete every platform session for ``user_id``. Returns rows removed."""
+        with session_scope(self._engine) as db:
+            result = db.execute(
+                delete(PlatformSession).where(PlatformSession.user_id == user_id)
+            )
+            return int(result.rowcount or 0)
+
+    def deactivate_user(self, user_id: str, password: str) -> None:
+        """Soft-delete: verify password, disable account, revoke all sessions."""
+        with session_scope(self._engine) as db:
+            user = db.get(User, user_id)
+            if not user or user.disabled or user.status == "disabled":
+                raise InvalidCredentialsError("invalid credentials")
+            if not user.password_hash or not verify_password(
+                user.password_hash, password
+            ):
+                raise InvalidCredentialsError("invalid credentials")
+            user.disabled = True
+            user.status = "disabled"
+            user.last_seen_at = datetime.now(timezone.utc)
+            db.execute(
+                delete(PlatformSession).where(PlatformSession.user_id == user_id)
+            )
+
     def request_password_reset(
         self,
         email: str,

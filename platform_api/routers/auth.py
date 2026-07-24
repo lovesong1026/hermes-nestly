@@ -61,6 +61,13 @@ class ChangePasswordBody(BaseModel):
     new_password: str = Field(min_length=8, max_length=128)
 
 
+class DeactivateBody(BaseModel):
+    """Soft-delete confirmation: current password + typed DELETE."""
+
+    password: str = Field(min_length=1, max_length=128)
+    confirm: str = Field(min_length=1, max_length=32)
+
+
 class ForgotPasswordBody(BaseModel):
     email: EmailStr
 
@@ -248,6 +255,29 @@ def change_password(
     except UserStoreError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"status": "ok"}
+
+
+@router.post("/deactivate")
+def deactivate(
+    body: DeactivateBody,
+    response: Response,
+    hermes_session: Optional[str] = Cookie(default=None, alias="hermes_session"),
+) -> dict[str, str]:
+    """Soft-delete: disable account, revoke sessions, clear cookie. Data retained."""
+    if body.confirm.strip().upper() != "DELETE":
+        raise HTTPException(
+            status_code=400,
+            detail="type DELETE to confirm account deactivation",
+        )
+    store, user = _require_session_user(hermes_session)
+    try:
+        store.deactivate_user(user["user_id"], body.password)
+    except InvalidCredentialsError as exc:
+        raise HTTPException(status_code=401, detail="invalid credentials") from exc
+    settings = get_settings()
+    response.delete_cookie(settings.session_cookie, path="/")
+    store.audit(user["user_id"], "auth.deactivate", target_type="user", target_id=user["user_id"])
+    return {"status": "deactivated"}
 
 
 @router.post("/forgot-password")

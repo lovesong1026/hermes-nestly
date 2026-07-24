@@ -264,8 +264,8 @@ def test_create_agent_always_prepends_platform_addendum(monkeypatch):
     assert "private skills dir" in eph
     assert "shell commands" in eph  # forbids shell-install workaround
     assert "operator-side action" in eph
-    # Brave / secret guidance
-    assert "BRAVE_SEARCH_API_KEY" in eph
+    # Brave / secret guidance — search keys stay operator-side.
+    assert "search-provider API keys" in eph or "BRAVE_SEARCH_API_KEY" in eph
     assert "MUST NOT contain API keys" in eph
 
     # SPA prompt supplied → addendum first, SPA prompt appended after
@@ -302,7 +302,7 @@ def test_create_agent_passes_per_request_model_override(monkeypatch):
 
 
 def test_create_agent_binds_workspace_in_prompt(monkeypatch, tmp_path):
-    """Ephemeral prompt must state the per-user workspace root."""
+    """Ephemeral prompt must describe the workspace without host absolute paths."""
     _patch_gateway_runtime(monkeypatch)
     captured = {}
     monkeypatch.setattr(
@@ -316,8 +316,10 @@ def test_create_agent_binds_workspace_in_prompt(monkeypatch, tmp_path):
         WebChatAgentRunner()._create_agent(user_id="u_alice")
 
     eph = captured.get("ephemeral_system_prompt") or ""
-    assert str(ws) in eph
+    assert str(ws) not in eph
+    assert "web_workspaces" not in eph
     assert "web_file_read" in eph
+    assert "workspace-relative" in eph or "uploads/" in eph
     assert captured.get("skip_context_files") is False
 
 

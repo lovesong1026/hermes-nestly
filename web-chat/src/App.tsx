@@ -28,9 +28,14 @@ import {
   type PlatformUser,
 } from './platformClient'
 import {
+  HERMES_UNAUTHORIZED_EVENT,
+  setPlatformUnauthorizedRedirect,
+} from './authRedirect'
+import {
   isAdminRoute,
   isWorkspaceRoute,
   mainTabFromRoute,
+  parseAuthMode,
   parseResetToken,
   parseRoute,
   routeHref,
@@ -102,6 +107,23 @@ function AppShell() {
     void refreshAuth()
   }, [refreshAuth])
 
+  // Platform 模式下 gateway 401 也跳转 `#/auth`；legacy 仍靠 KeyPromptModal。
+  useEffect(() => {
+    setPlatformUnauthorizedRedirect(platformMode)
+    return () => setPlatformUnauthorizedRedirect(false)
+  }, [platformMode])
+
+  useEffect(() => {
+    const onUnauthorized = () => {
+      clearWorkspaceId()
+      setUser(null)
+      setPageKey((n) => n + 1)
+    }
+    window.addEventListener(HERMES_UNAUTHORIZED_EVENT, onUnauthorized)
+    return () =>
+      window.removeEventListener(HERMES_UNAUTHORIZED_EVENT, onUnauthorized)
+  }, [])
+
   useEffect(() => {
     const onHashChange = () => {
       const next = parseRoute(window.location.hash)
@@ -140,11 +162,24 @@ function AppShell() {
     clearWorkspaceId()
     setUser(null)
     setPageKey((n) => n + 1)
-    goto('chat')
+    goto(platformMode ? 'auth' : 'chat')
     void refreshAuth()
   }
 
   const showAuthGate = platformMode && !authLoading && !user
+  // 未登录时把 hash 规范到 `#/auth`（重置密码 / 分享除外）
+  useEffect(() => {
+    if (!showAuthGate) return
+    if (route === 'reset-password' || route === 'share') return
+    if (route !== 'auth') goto('auth')
+  }, [showAuthGate, route])
+
+  // 已登录访问 `#/auth` → 回聊天
+  useEffect(() => {
+    if (authLoading || !user) return
+    if (route === 'auth') goto('chat')
+  }, [authLoading, user, route])
+
   const needsBindKey =
     platformMode &&
     Boolean(user) &&
@@ -252,7 +287,9 @@ function AppShell() {
         ) : showAuthGate ? (
           <AuthPage
             initialMode={
-              route === 'reset-password' ? 'reset' : 'login'
+              route === 'reset-password'
+                ? 'reset'
+                : (parseAuthMode(window.location.hash) ?? 'login')
             }
             resetToken={
               route === 'reset-password'

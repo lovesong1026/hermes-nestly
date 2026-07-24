@@ -90,7 +90,9 @@ export function KeyPromptModal({
         <form onSubmit={onSubmit} className="space-y-4">
           <DialogHeader>
             <DialogTitle>{heading}</DialogTitle>
-            <DialogDescription>{subline}</DialogDescription>
+            {subline ? (
+              <DialogDescription>{subline}</DialogDescription>
+            ) : null}
           </DialogHeader>
 
           <div className="space-y-2">

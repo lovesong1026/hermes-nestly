@@ -28,8 +28,11 @@ STATUSES = frozenset({"active", "pending", "archived"})
 SOURCES = frozenset({"conversation", "manual", "import", "agent_tool"})
 
 # Match MemoryStore defaults — truncate by importance when projecting.
-_MEMORY_CHAR_LIMIT = 2200
-_USER_CHAR_LIMIT = 1375
+MEMORY_CHAR_LIMIT = 2200
+USER_CHAR_LIMIT = 1375
+# Back-compat aliases for internal callers
+_MEMORY_CHAR_LIMIT = MEMORY_CHAR_LIMIT
+_USER_CHAR_LIMIT = USER_CHAR_LIMIT
 
 _MEMORY_FILE = "memories/MEMORY.md"
 _PROFILE_FILE = "memories/USER.md"
@@ -125,7 +128,34 @@ def get_stats(db: Session, *, workspace_id: str) -> dict[str, Any]:
         "total": int(total or 0),
         "pending": int(pending or 0),
         "last_updated_at": last.isoformat() if last else None,
+        # 投影到 MEMORY.md / USER.md 的字符上限（编辑区计数用）
+        "limits": {
+            "memory": MEMORY_CHAR_LIMIT,
+            "profile": USER_CHAR_LIMIT,
+        },
     }
+
+
+def reset_workspace_memory(
+    db: Session,
+    *,
+    workspace_id: str,
+    user_id: str,
+) -> dict[str, int]:
+    """Delete all memory_items for the workspace and clear projected md files."""
+    rows = list(
+        db.execute(
+            select(MemoryItem).where(MemoryItem.workspace_id == workspace_id)
+        )
+        .scalars()
+        .all()
+    )
+    deleted = len(rows)
+    for row in rows:
+        db.delete(row)
+    db.flush()
+    project_active_memories(db, workspace_id=workspace_id, user_id=user_id)
+    return {"deleted": deleted}
 
 
 def create_item(

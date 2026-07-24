@@ -41,10 +41,11 @@
 **下一步优先（未做项）**
 
 1. ~~Memory Extractor / web_memory 类别 / Admin Skill / KC 异步 / 体验收尾~~ → **已做**
-2. 运维：**签署** SECURITY_REVIEW §6；在 staging 跑通 **50 VU SSE** 并归档报告
-3. Usage 全量工具自动埋点 / 硬配额 → Post-MVP
-4. `platform_settings` 热切换搜索后端 Admin UI → Post-MVP
-5. `legacy_user_id_map` / bind-key 后会话统一（可选）
+2. ~~独立 `#/auth` / 全局 401 / Memory 重置·字符计数 / 软注销 / Skill 中量~~ → **已做**（2026-07-24）
+3. 运维：**签署** SECURITY_REVIEW §6；在 staging 跑通 **50 VU SSE** 并归档报告
+4. Usage 全量工具自动埋点 / 硬配额 → Post-MVP
+5. `platform_settings` 热切换搜索后端 Admin UI → Post-MVP
+6. `legacy_user_id_map` / bind-key 后会话统一（可选）
 
 **图例**：`[ ]` 待做 · `[~]` 进行中 / 部分完成 · `[x]` 完成 · `[-]` 明确不做（MVP 外）
 
@@ -216,12 +217,12 @@ flowchart TD
 
 - [x] 新增 `web-chat/src/pages/AuthPage.tsx`（注册 + 登录）
 - [~] `web-chat/src/api.ts` 拆分 — 新增 `platformClient.ts`；`api.ts` 仍服务 Agent Gateway
-- [~] 路由：未登录显示 `AuthPage`；**无独立 `#/auth` hash**（App 级门禁）
+- [x] 路由：未登录 `#/auth`（可 `?mode=register`）；`#/reset-password` 保留；App 级门禁 + hash 规范
 - [x] `AuthPage` 主路径；`KeyPromptModal` 保留为「API Key 登录」
 - [x] Settings 内 bind-key 区块（`upstream_status=pending_bind`）
 - [x] Chat 页：`pending_bind` 无 key 时服务端 403（Settings 引导绑定）
 - [x] i18n 文案（`zh.json` / `en.json`）
-- [~] 401 统一跳转 — App 级 `tryPlatformSession`；**非全局 axios 拦截器**
+- [x] 401 统一跳转 — platform 模式 `platformRequest` / `request` / `streamChat` → `#/auth` + `hermes:unauthorized`
 
 ### 1.5 Workspace API
 
@@ -355,14 +356,14 @@ flowchart TD
 
 - [x] `web-chat/src/pages/MemoryPage.tsx`
 - [x] 长期记忆 / 用户画像编辑区 + 保存（已升级为 Memory Center）
-- [~] 重置 / 字符计数（**未做**）
+- [x] 重置 / 字符计数（`POST .../memory/reset` + stats.limits + Dialog 计数）
 - [x] 路由 `#/memory`
 
 ### 4.2b Memory Center MVP
 
 - [x] `memory_items` 表 + Alembic `002_memory_items`
 - [x] `platform_api/services/memory_center.py` — CRUD / approve / reject / 投影 md
-- [x] API：`/memory/items`、`/memory/stats`、approve、reject、migrate-from-files
+- [x] API：`/memory/items`、`/memory/stats`、approve、reject、migrate-from-files、**reset**
 - [x] Memory Center UI：Profile / Preferences / Projects / Pending / All
 - [x] `web_memory` 工具替换 hermes-web-chat 的 `memory`（仅 pending）
 - [x] `web_memory` 类别：`user`→profile、`preference`/`project`、`memory`→knowledge
@@ -393,7 +394,7 @@ flowchart TD
 - [x] enable / disable API + Skill Center UI（配置 Dialog）
 - [x] skill hint 改为 `web_skill_view` / `web_skills_list`
 - [x] mutate 路径 AuditLog（`skills.*`）
-- [ ] Skill Router / 使用日志产品化（后续）
+- [x] Skill list entitlement 对齐 + skill 工具埋点收尾（中量；非意图 Router）
 
 ### 4.4c Usage Center MVP
 
@@ -402,16 +403,17 @@ flowchart TD
 - [x] API：`/usage/summary|trend|by-model|by-skill|logs`；`POST /usage/record` → 403
 - [x] Chat turn done → `track_chat_turn`（不改 `run_agent.py`）
 - [x] 代表工具埋点：`web_skill_view` / `web_skill_install` / `web_knowledge_search`
+- [x] skill 全工具埋点：list / view / install / edit / patch / delete
 - [x] UI：`#/usage` + Settings / AccountMenu 入口；与 `/billing/*` 并存
 - [x] 测试：`tests/platform/test_usage_center.py`
-- [ ] 全量工具自动埋点 / 硬配额拦截（后续）
+- [ ] 硬配额拦截（后续）
 
 ### 4.5 Agent 启动时 Skill Hint 注入
 
 - [x] `web_chat.py::_build_skill_hint()` 读取 enabled skills
 - [x] 附加 ephemeral `system_prompt` 片段
 - [x] 未修改 `prompt_builder.py`
-- [ ] 测试：启用 skill 后 agent 主动调用 `web_skills_list`
+- [x] 测试：启用 skill 后 hint 含 `web_skills_list` 优先契约（`test_web_skill_hint.py`）
 
 ### 4.6 Web Search（P1，已有能力，仅补运营配置）
 
@@ -605,10 +607,11 @@ flowchart TD
 - [x] Chat 附件芯片右对齐 + 悬停/Drawer 预览（图 / md / pdf）
 - [x] Knowledge 列表卡片间距疏朗化
 - [x] 键盘快捷键面板（`?`）：发送、新建对话、聚焦输入框
-- [ ] 账户：修改邮箱、注销账号（需 API + 合规文案）
+- [x] 账户：修改邮箱（`PATCH /auth/me` + 保存前确认）；软注销（`POST /auth/deactivate`）
 - [x] 无障碍：焦点陷阱、跳过导航、`aria-live` 流式区域
 - [x] 更新 `web-chat/README.md`（移除不存在的 `QuotaBadge` 描述，对齐实际页面树）
 - [x] Platform API 结构化日志 / `X-Request-ID`
+- [x] 独立 `#/auth` hash + fetch 层 401 → `#/auth`（platform 模式）
 
 ### 已有能力（无需重复立项）
 
@@ -688,6 +691,7 @@ flowchart TD
 | GET | `/auth/me` | 1 | [x] |
 | PATCH | `/auth/me` | 1 | [x] 资料 / 头像 |
 | POST | `/auth/change-password` | 1 | [x] |
+| POST | `/auth/deactivate` | 1 | [x] 软注销 |
 | POST | `/auth/forgot-password` | 1 | [x] |
 | POST | `/auth/reset-password` | 1 | [x] |
 | GET | `/billing/usage`、`/billing/logs` | 1 | [x] |
@@ -719,7 +723,8 @@ flowchart TD
 | POST | `/usage/record` | 4 | [x] 对外 403（仅 Tracker） |
 | GET | `/workspaces/{id}/memory` | 4 | [x] legacy md |
 | PATCH | `/workspaces/{id}/memory` | 4 | [x] legacy md |
-| GET | `/workspaces/{id}/memory/stats` | 4 | [x] Memory Center |
+| GET | `/workspaces/{id}/memory/stats` | 4 | [x] Memory Center（含 limits） |
+| POST | `/workspaces/{id}/memory/reset` | 4 | [x] 清空条目 + 投影 |
 | GET/POST | `/workspaces/{id}/memory/items` | 4 | [x] |
 | PUT/DELETE | `/workspaces/{id}/memory/items/{id}` | 4 | [x] |
 | POST | `/workspaces/{id}/memory/items/{id}/approve|reject` | 4 | [x] |
@@ -804,3 +809,4 @@ flowchart TD
 | 2026-07-19 | **Phase 6 硬化切片**：深度 `/api/v1/healthz`；`deploy/loadtest` k6 10 VU；`SECURITY_REVIEW.md` 可签署 checklist |
 | 2026-07-23 | **静态分享**：`/shares` + `#/share/{token}`；**混合 web_search**（Brave+ddgs+配额）；**Agent→Files**（`origin=agent`）；Chat 附件预览 UX；Knowledge 卡片疏朗；刷新「下一步优先」 |
 | 2026-07-23 | **下一步交付**：Memory Extractor Phase 2 + `web_memory` preference/project；Admin Skills UI；KC 异步索引；Files 拖拽 / Memory Markdown / request_id；SECURITY_REVIEW 证据索引；k6 50 VU SSE + FakeRunner；Compose CI |
+| 2026-07-24 | **SPA 收尾**：`#/auth` + 401 跳转；Memory reset/字符计数；软注销 deactivate；Skill list entitlement + 全工具埋点 + hint 契约测试 |

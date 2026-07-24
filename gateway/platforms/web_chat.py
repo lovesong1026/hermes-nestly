@@ -145,9 +145,19 @@ _UPLOAD_MAX_FILENAME_LEN = 120
 
 
 def _truncate_for_sse(text: str, limit: int = _SSE_PAYLOAD_TRUNCATE_BYTES) -> str:
-    """Trim a payload string to ``limit`` chars, appending an ellipsis marker."""
+    """Trim a payload string to ``limit`` chars, appending an ellipsis marker.
+
+    Host absolute paths are scrubbed first so tool previews / tokens never
+    leak ``web_workspaces/<uid>/`` layout to the browser.
+    """
     if not isinstance(text, str):
         text = str(text)
+    try:
+        from gateway.web.path_privacy import scrub_host_paths
+
+        text = scrub_host_paths(text)
+    except Exception:
+        pass
     if len(text) <= limit:
         return text
     return text[:limit] + f"\n…[truncated {len(text) - limit} chars]"
@@ -747,7 +757,8 @@ class WebChatAdapter(BasePlatformAdapter):
         for name in names:
             lines.append(f"- `{name}`")
         lines.append(
-            "Use `web_skill_view` (or `web_skills_list`) when a skill's procedure is needed."
+            "Call `web_skills_list` first when discovering or choosing a skill; "
+            "use `web_skill_view` when you already know the skill name."
         )
         return "\n".join(lines)
 
@@ -854,18 +865,34 @@ class WebChatAdapter(BasePlatformAdapter):
             return self._json_error("conversation unavailable", status=500)
 
         messages = []
+        try:
+            from gateway.web.path_privacy import scrub_value
+            from gateway.web.sandbox import workspace_for
+
+            ws = workspace_for(user_id)
+        except Exception:
+            scrub_value = None  # type: ignore[assignment]
+            ws = None
+
         for r in rows:
             role = r.get("role")
             if role not in ("user", "assistant", "tool", "system"):
                 continue
+            content = r.get("content")
+            tool_calls = r.get("tool_calls") or []
+            reasoning = r.get("reasoning") or r.get("reasoning_content") or None
+            if scrub_value is not None:
+                content = scrub_value(content, workspace=ws)
+                tool_calls = scrub_value(tool_calls, workspace=ws)
+                reasoning = scrub_value(reasoning, workspace=ws)
             messages.append({
                 "id": r.get("id"),
                 "role": role,
-                "content": r.get("content"),
-                "tool_calls": r.get("tool_calls") or [],
+                "content": content,
+                "tool_calls": tool_calls,
                 "tool_call_id": r.get("tool_call_id"),
                 "tool_name": r.get("tool_name"),
-                "reasoning": r.get("reasoning") or r.get("reasoning_content") or None,
+                "reasoning": reasoning,
                 "timestamp": r.get("timestamp"),
             })
 
@@ -1311,6 +1338,12 @@ class WebChatAdapter(BasePlatformAdapter):
 
         def stream_delta_cb(text: str, **_kwargs) -> None:
             if text:
+                try:
+                    from gateway.web.path_privacy import scrub_host_paths
+
+                    text = scrub_host_paths(text)
+                except Exception:
+                    pass
                 _push("token", {"text": text})
 
         def tool_start_cb(tool_call_id, name, args=None, *_, **_kwargs) -> None:
@@ -1403,6 +1436,12 @@ class WebChatAdapter(BasePlatformAdapter):
             # the model's reasoning trace into the SPA so the user can
             # see what the agent was thinking between tool calls.
             if text:
+                try:
+                    from gateway.web.path_privacy import scrub_host_paths
+
+                    text = scrub_host_paths(text)
+                except Exception:
+                    pass
                 _push("reasoning", {"text": text})
 
         def status_cb(kind, message, *_, **_kwargs) -> None:
@@ -1494,7 +1533,10 @@ class WebChatAdapter(BasePlatformAdapter):
                         "[%s] agent run failed for user=%s session=%s: %s",
                         self.name, user_id, session_id, exc, exc_info=True,
                     )
-                    _push("error", {"message": str(exc), "code": "agent_error"})
+                    _push("error", {
+                        "message": _truncate_for_sse(str(exc), 280),
+                        "code": "agent_error",
+                    })
                     await event_queue.put(None)
                     try:
                         await writer_task
@@ -1519,8 +1561,9 @@ class WebChatAdapter(BasePlatformAdapter):
                     event_queue.put_nowait({
                         "event": "error",
                         "data": {
-                            "message": str(
-                                result.get("error") or "agent run failed"
+                            "message": _truncate_for_sse(
+                                str(result.get("error") or "agent run failed"),
+                                280,
                             ),
                             "code": "agent_error",
                         },

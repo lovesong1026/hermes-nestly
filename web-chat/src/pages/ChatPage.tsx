@@ -70,6 +70,7 @@ import {
   filterModelsByFavorites,
   PREFERENCES_UPDATED_EVENT,
 } from '../modelFavorites'
+import { resolveInitialModel } from '../modelStarter'
 import {
   conversationToMarkdown,
   downloadMarkdown,
@@ -225,12 +226,12 @@ export function ChatPage({
         setModels(catalog)
         setFavoriteModels(favorites)
         const picker = filterModelsByFavorites(catalog, favorites)
-        const pref =
-          res.preferred_model?.trim() ||
-          res.default_model?.trim() ||
-          picker[0]?.id ||
-          catalog[0]?.id ||
-          ''
+        const pref = resolveInitialModel({
+          preferred: res.preferred_model,
+          defaultModel: res.default_model,
+          catalogIds: catalog.map((m) => m.id),
+          pickerIds: picker.map((m) => m.id),
+        })
         setSelectedModel(pref)
       })
       .catch(() => undefined)

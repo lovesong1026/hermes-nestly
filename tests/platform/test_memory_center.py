@@ -14,6 +14,15 @@ def _setup_user(client, mock_upstream_key, email: str = "mem@example.com"):
     return body["user"]["user_id"], body["workspace"]["id"]
 
 
+def test_stats_include_projection_limits(client, mock_upstream_key):
+    _uid, wid = _setup_user(client, mock_upstream_key, email="lim@example.com")
+    stats = client.get(f"/api/v1/workspaces/{wid}/memory/stats")
+    assert stats.status_code == 200
+    body = stats.json()
+    assert body["limits"]["memory"] == 2200
+    assert body["limits"]["profile"] == 1375
+
+
 def test_create_list_and_stats(client, mock_upstream_key):
     _uid, wid = _setup_user(client, mock_upstream_key)
     created = client.post(
@@ -43,6 +52,57 @@ def test_create_list_and_stats(client, mock_upstream_key):
     assert body["total"] == 1
     assert body["pending"] == 0
     assert body["last_updated_at"]
+    assert body["limits"]["memory"] == 2200
+
+
+def test_reset_clears_items_and_md(client, mock_upstream_key):
+    user_id, wid = _setup_user(client, mock_upstream_key, email="rst@example.com")
+    client.post(
+        f"/api/v1/workspaces/{wid}/memory/items",
+        json={"category": "preference", "content": "wipe me", "status": "active"},
+    )
+    client.post(
+        f"/api/v1/workspaces/{wid}/memory/items",
+        json={"category": "profile", "content": "wipe profile", "status": "active"},
+    )
+    listed = client.get(f"/api/v1/workspaces/{wid}/memory/items")
+    assert len(listed.json()["items"]) == 2
+
+    reset = client.post(f"/api/v1/workspaces/{wid}/memory/reset")
+    assert reset.status_code == 200, reset.text
+    assert reset.json()["deleted"] == 2
+    assert reset.json()["status"] == "ok"
+
+    after = client.get(f"/api/v1/workspaces/{wid}/memory/items")
+    assert after.json()["items"] == []
+
+    with enter_user_context(user_id):
+        store = MemoryStore()
+        store.load_from_disk()
+        assert store.memory_entries == []
+        assert store.user_entries == []
+
+
+def test_user_cannot_reset_other_users_memory(client, mock_upstream_key):
+    _uid_a, wid_a = _setup_user(client, mock_upstream_key, email="ra@example.com")
+    client.post(
+        f"/api/v1/workspaces/{wid_a}/memory/items",
+        json={"category": "preference", "content": "alice keep"},
+    )
+
+    _uid_b, _wid_b = _setup_user(client, mock_upstream_key, email="rb@example.com")
+    denied = client.post(f"/api/v1/workspaces/{wid_a}/memory/reset")
+    assert denied.status_code == 404
+
+    # Re-login as Alice and confirm data remains
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": "ra@example.com", "password": "password123"},
+    )
+    assert login.status_code == 200, login.text
+    listed = client.get(f"/api/v1/workspaces/{wid_a}/memory/items")
+    assert len(listed.json()["items"]) == 1
+    assert listed.json()["items"][0]["content"] == "alice keep"
 
 
 def test_approve_projects_to_memory_md(client, mock_upstream_key):

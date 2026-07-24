@@ -1,5 +1,10 @@
 // Platform control-plane client (`/api/v1/*` on platform-api or nginx).
 
+import {
+  handleUnauthorizedRedirect,
+  isPlatformAuthExemptPath,
+} from './authRedirect'
+
 export type PlatformUser = {
   user_id: string
   email?: string
@@ -64,6 +69,10 @@ export type MemoryStats = {
   total: number
   pending: number
   last_updated_at?: string | null
+  limits?: {
+    memory: number
+    profile: number
+  }
 }
 
 export type KnowledgeBase = {
@@ -288,9 +297,15 @@ function formatApiDetail(detail: unknown, fallback: string): string {
   }
 }
 
+type PlatformRequestOpts = {
+  /** Skip global 401 → `#/auth` (session probe / silent checks). */
+  skipUnauthorizedHandler?: boolean
+}
+
 async function platformRequest<T>(
   path: string,
   init: RequestInit = {},
+  opts: PlatformRequestOpts = {},
 ): Promise<T> {
   const isForm = typeof FormData !== 'undefined' && init.body instanceof FormData
   const res = await fetch(`${BASE}${path}`, {
@@ -307,6 +322,14 @@ async function platformRequest<T>(
       rawDetail = body.detail ?? body.error ?? res.statusText
     } catch {
       // ignore
+    }
+    if (
+      res.status === 401 &&
+      !opts.skipUnauthorizedHandler &&
+      !isPlatformAuthExemptPath(path)
+    ) {
+      clearWorkspaceId()
+      handleUnauthorizedRedirect()
     }
     throw new PlatformApiError(
       formatApiDetail(rawDetail, res.statusText),
@@ -379,6 +402,12 @@ export const platform = {
     platformRequest<{ status: string }>('/auth/change-password', {
       method: 'POST',
       body: JSON.stringify({ current_password, new_password }),
+    }),
+
+  deactivate: (password: string, confirm: string) =>
+    platformRequest<{ status: string }>('/auth/deactivate', {
+      method: 'POST',
+      body: JSON.stringify({ password, confirm }),
     }),
 
   forgotPassword: (email: string) =>
@@ -480,6 +509,12 @@ export const platform = {
 
   getMemoryStats: (workspaceId: string) =>
     platformRequest<MemoryStats>(`/workspaces/${workspaceId}/memory/stats`),
+
+  resetMemory: (workspaceId: string) =>
+    platformRequest<{ status: string; deleted: number }>(
+      `/workspaces/${workspaceId}/memory/reset`,
+      { method: 'POST' },
+    ),
 
   createMemoryItem: (
     workspaceId: string,
@@ -949,10 +984,16 @@ export async function tryPlatformSession(): Promise<{
     return null
   }
   try {
-    const user = await platform.me()
+    const user = await platformRequest<PlatformUser>('/auth/me', {}, {
+      skipUnauthorizedHandler: true,
+    })
     let workspaceId = getStoredWorkspaceId()
     if (!workspaceId) {
-      const workspaces = await platform.listWorkspaces()
+      const workspaces = await platformRequest<Workspace[]>(
+        '/workspaces',
+        {},
+        { skipUnauthorizedHandler: true },
+      )
       if (workspaces[0]?.id) {
         workspaceId = workspaces[0].id
         storeWorkspaceId(workspaceId)

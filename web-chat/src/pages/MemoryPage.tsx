@@ -59,6 +59,22 @@ export function MemoryPage() {
   const [draftContent, setDraftContent] = useState('')
   const [draftCategory, setDraftCategory] = useState('preference')
   const [createOpen, setCreateOpen] = useState(false)
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
+
+  const charLimit = useMemo(() => {
+    const limits = stats?.limits
+    if (!limits) return 2200
+    return draftCategory === 'profile' ? limits.profile : limits.memory
+  }, [stats, draftCategory])
+
+  const charCountLabel = useMemo(
+    () =>
+      t('memory.chars', {
+        current: draftContent.length,
+        max: charLimit,
+      }),
+    [t, draftContent.length, charLimit],
+  )
 
   const reload = useCallback(async () => {
     if (!workspaceId) return
@@ -188,6 +204,21 @@ export function MemoryPage() {
     }
   }
 
+  const resetAll = async () => {
+    if (!workspaceId) return
+    setBusy(true)
+    try {
+      await platform.resetMemory(workspaceId)
+      toast.success(t('memory.reset.ok'))
+      setResetConfirmOpen(false)
+      await reload()
+    } catch (err) {
+      toast.error(err instanceof PlatformApiError ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const statsLine = useMemo(() => {
     if (!stats) return null
     return (
@@ -217,9 +248,19 @@ export function MemoryPage() {
       density="reading"
       constrainWidth={false}
       actions={
-        <Button type="button" onClick={openCreate} disabled={busy}>
-          {t('memory.add')}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onClick={() => setResetConfirmOpen(true)}
+          >
+            {t('memory.reset')}
+          </Button>
+          <Button type="button" onClick={openCreate} disabled={busy}>
+            {t('memory.add')}
+          </Button>
+        </div>
       }
     >
       {statsLine}
@@ -415,6 +456,15 @@ export function MemoryPage() {
               previewLabel={t('memory.preview')}
               className="memory-md-editor"
             />
+            <span
+              className={cn(
+                'memory-char-count text-muted-foreground text-xs mt-1',
+                draftContent.length > charLimit && 'text-destructive',
+              )}
+              data-testid="memory-char-count"
+            >
+              {charCountLabel}
+            </span>
           </label>
           <DialogFooter>
             <Button
@@ -430,6 +480,34 @@ export function MemoryPage() {
               onClick={() => void saveEdit()}
             >
               {t('memory.save')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={resetConfirmOpen} onOpenChange={setResetConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('memory.reset')}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {t('memory.reset.confirm')}
+          </p>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setResetConfirmOpen(false)}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={busy}
+              onClick={() => void resetAll()}
+            >
+              {t('memory.reset')}
             </Button>
           </DialogFooter>
         </DialogContent>

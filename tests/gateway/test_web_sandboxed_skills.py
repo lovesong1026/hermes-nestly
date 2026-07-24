@@ -218,6 +218,43 @@ def test_list_invalid_source_rejected(hermes_home, alice_workspace):
     assert "invalid source" in result["error"]
 
 
+def test_list_filters_disabled_entitlement(hermes_home, alice_workspace, monkeypatch):
+    """When PlatformStore reports enabled names, list hides the rest."""
+    _seed_global_skill(hermes_home, "research", "keep-me", "visible")
+    _seed_global_skill(hermes_home, "research", "hide-me", "hidden")
+
+    monkeypatch.setattr(
+        mod,
+        "_enabled_skill_names_or_none",
+        lambda: {"keep-me"},
+    )
+    result = _call("web_skills_list", {})
+    assert result["success"] is True
+    names = {s["name"] for s in result["skills"]}
+    assert "keep-me" in names
+    assert "hide-me" not in names
+
+
+def test_list_tracks_usage(hermes_home, alice_workspace, monkeypatch):
+    tracked = []
+
+    def _fake_track(user_id, *, skill_name, tool_name, metadata=None):
+        tracked.append(
+            {
+                "user_id": user_id,
+                "skill_name": skill_name,
+                "tool_name": tool_name,
+                "metadata": metadata,
+            }
+        )
+
+    monkeypatch.setattr(mod, "_track_skill", _fake_track)
+    _call("web_skills_list", {})
+    assert tracked
+    assert tracked[0]["tool_name"] == "web_skills_list"
+    assert tracked[0]["user_id"] == "u_alice"
+
+
 # ── web_skill_view ─────────────────────────────────────────────────────
 
 

@@ -12,6 +12,7 @@ export type Route =
   | 'admin'
   | 'admin-audit'
   | 'admin-skills'
+  | 'auth'
   | 'reset-password'
   | 'share'
 
@@ -31,6 +32,7 @@ const ROUTES: Route[] = [
   'admin-skills',
   'admin-audit',
   'admin',
+  'auth',
   'reset-password',
   'share',
   'chat',
@@ -55,6 +57,17 @@ export function parseRoute(hash: string): Route {
   // Public share: `#/share/<token>`
   if (path === 'share' || path.startsWith('share/')) return 'share'
   return ROUTES.find((r) => path === r) ?? 'chat'
+}
+
+/** Read ``mode`` from ``#/auth?mode=register|login`` (default login). */
+export function parseAuthMode(hash: string): 'login' | 'register' | null {
+  const raw = hash.replace(/^#\/?/, '')
+  const path = raw.split('?')[0] ?? ''
+  if (path !== 'auth') return null
+  const q = raw.includes('?') ? raw.slice(raw.indexOf('?') + 1) : ''
+  const mode = new URLSearchParams(q).get('mode')?.trim().toLowerCase()
+  if (mode === 'register') return 'register'
+  return 'login'
 }
 
 /** Read ``token`` from ``#/reset-password?token=…``. */

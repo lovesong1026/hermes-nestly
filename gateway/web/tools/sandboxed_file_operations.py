@@ -38,6 +38,7 @@ import mimetypes
 from pathlib import Path
 from typing import Any, Callable, Dict
 
+from gateway.web.path_privacy import scrub_host_paths
 from gateway.web.sandbox import PathSandboxViolation, confine_path
 from tools.file_operations import normalize_read_pagination
 from tools.file_tools import (
@@ -193,6 +194,17 @@ def _json_or_passthrough(value: Any) -> str:
     if isinstance(value, str):
         return value
     return json.dumps(value, ensure_ascii=False)
+
+
+def _privacy_wrap(handler: Callable[..., str]) -> Callable[..., str]:
+    """Scrub absolute host paths from every tool result before the model sees it."""
+
+    def wrapped(args: Dict[str, Any], **kw: Any) -> str:
+        return scrub_host_paths(_json_or_passthrough(handler(args, **kw)))
+
+    wrapped.__name__ = getattr(handler, "__name__", "wrapped")
+    wrapped.__doc__ = getattr(handler, "__doc__", None)
+    return wrapped
 
 
 def _format_line_window(
@@ -412,12 +424,20 @@ def _handle_web_file_search(args: Dict[str, Any], **kw: Any) -> str:
     )
 
 
+# Wrap handlers so direct calls (tests) and registry share the same scrub.
+_handle_web_file_read = _privacy_wrap(_handle_web_file_read)
+_handle_web_file_write = _privacy_wrap(_handle_web_file_write)
+_handle_web_file_patch = _privacy_wrap(_handle_web_file_patch)
+_handle_web_file_search = _privacy_wrap(_handle_web_file_search)
+
+
 # ── Schemas ────────────────────────────────────────────────────────────────
 
 
 _SANDBOX_NOTE = (
-    " All paths are confined to your per-user workspace; paths that "
-    "escape via '..' or absolute paths outside it are rejected."
+    " All paths are confined to your per-user workspace; use workspace-"
+    "relative paths only (e.g. uploads/a.csv). Paths that escape via '..' "
+    "or leave the workspace are rejected. Never echo absolute host paths."
 )
 
 
@@ -434,7 +454,10 @@ _WEB_FILE_READ_SCHEMA = {
         "properties": {
             "path": {
                 "type": "string",
-                "description": "Path to the file (relative to workspace, or absolute under workspace).",
+                "description": (
+                    "Workspace-relative path (e.g. uploads/data.csv). "
+                    "Prefer relative paths; do not use or echo host absolute paths."
+                ),
             },
             "offset": {
                 "type": "integer",
@@ -586,6 +609,7 @@ def _register_all() -> None:
                 name=name,
                 toolset=_TOOLSET,
                 schema=schema,
+                # Handlers are already ``_privacy_wrap``'d above.
                 handler=handler,
                 max_result_size_chars=100_000,
             )

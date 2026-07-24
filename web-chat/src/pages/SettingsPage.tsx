@@ -46,6 +46,7 @@ import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import { notifyPreferencesUpdated } from '../modelFavorites'
+import { resolveInitialModel } from '../modelStarter'
 
 type Props = {
   open: boolean
@@ -95,6 +96,9 @@ export function SettingsPage({
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [passwordBusy, setPasswordBusy] = useState(false)
+  const [deactivatePassword, setDeactivatePassword] = useState('')
+  const [deactivateConfirm, setDeactivateConfirm] = useState('')
+  const [deactivateBusy, setDeactivateBusy] = useState(false)
 
   // Models
   const [allModels, setAllModels] = useState<{ id: string; owned_by?: string }[]>([])
@@ -147,10 +151,12 @@ export function SettingsPage({
       setAllModels(res.models ?? [])
       setFavorites(res.favorite_models ?? [])
       setPreferred(
-        res.preferred_model?.trim() ||
-          res.default_model?.trim() ||
-          res.models[0]?.id ||
-          '',
+        resolveInitialModel({
+          preferred: res.preferred_model,
+          defaultModel: res.default_model,
+          catalogIds: (res.models ?? []).map((m) => m.id),
+          pickerIds: (res.models ?? []).map((m) => m.id),
+        }),
       )
     } catch {
       setAllModels([])
@@ -214,11 +220,21 @@ export function SettingsPage({
 
   const saveProfile = async () => {
     if (!platformMode) return
+    const nextEmail = email.trim()
+    const prevEmail = (me?.email ?? '').trim().toLowerCase()
+    if (
+      nextEmail &&
+      prevEmail &&
+      nextEmail.toLowerCase() !== prevEmail &&
+      !window.confirm(t('settings.account.email.confirm', { email: nextEmail }))
+    ) {
+      return
+    }
     setProfileBusy(true)
     try {
       const u = await platform.patchMe({
         nickname: nickname.trim(),
-        email: email.trim(),
+        email: nextEmail,
         avatar_url: avatarUrl ?? undefined,
         clear_avatar: avatarUrl === null && Boolean(me?.avatar_url),
       })
@@ -233,6 +249,25 @@ export function SettingsPage({
       )
     } finally {
       setProfileBusy(false)
+    }
+  }
+
+  const deactivateAccount = async () => {
+    if (!platformMode) return
+    setDeactivateBusy(true)
+    try {
+      await platform.deactivate(deactivatePassword, deactivateConfirm)
+      toast.success(t('settings.deactivate.ok'))
+      onOpenChange(false)
+      onLoggedOut()
+    } catch (err) {
+      toast.error(
+        err instanceof PlatformApiError
+          ? err.message
+          : t('settings.deactivate.fail'),
+      )
+    } finally {
+      setDeactivateBusy(false)
     }
   }
 
@@ -671,6 +706,56 @@ export function SettingsPage({
                     onClick={() => void savePassword()}
                   >
                     {passwordBusy ? t('common.loading') : t('settings.password.submit')}
+                  </Button>
+                </section>
+
+                <Separator />
+
+                <section className="space-y-3" data-testid="settings-deactivate">
+                  <h3 className="text-sm font-semibold text-destructive">
+                    {t('settings.deactivate.title')}
+                  </h3>
+                  <p className="text-muted-foreground text-sm">
+                    {t('settings.deactivate.hint')}
+                  </p>
+                  <div className="space-y-2">
+                    <Label htmlFor="settings-deactivate-pw">
+                      {t('settings.password.current')}
+                    </Label>
+                    <Input
+                      id="settings-deactivate-pw"
+                      type="password"
+                      value={deactivatePassword}
+                      onChange={(e) => setDeactivatePassword(e.target.value)}
+                      autoComplete="current-password"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="settings-deactivate-confirm">
+                      {t('settings.deactivate.confirmLabel')}
+                    </Label>
+                    <Input
+                      id="settings-deactivate-confirm"
+                      value={deactivateConfirm}
+                      onChange={(e) => setDeactivateConfirm(e.target.value)}
+                      placeholder="DELETE"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    disabled={
+                      deactivateBusy ||
+                      deactivatePassword.length < 1 ||
+                      deactivateConfirm.trim().toUpperCase() !== 'DELETE'
+                    }
+                    onClick={() => void deactivateAccount()}
+                  >
+                    {deactivateBusy
+                      ? t('common.loading')
+                      : t('settings.deactivate.submit')}
                   </Button>
                 </section>
               </TabsContent>

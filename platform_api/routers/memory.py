@@ -119,6 +119,31 @@ def memory_stats(
         return mc.get_stats(db, workspace_id=workspace_id)
 
 
+@router.post("/{workspace_id}/memory/reset")
+def reset_memory(
+    workspace_id: str,
+    user_id: str = Depends(get_current_user_id),
+) -> dict[str, Any]:
+    """清空本工作区全部记忆条目并重写投影 md（不可恢复）。"""
+    store = get_store()
+    with session_scope(store._engine) as db:
+        try:
+            mc.assert_workspace(db, workspace_id, user_id)
+        except LookupError:
+            raise HTTPException(status_code=404, detail="not found") from None
+        result = mc.reset_workspace_memory(
+            db, workspace_id=workspace_id, user_id=user_id
+        )
+    store.audit(
+        user_id,
+        "memory.reset",
+        target_type="workspace",
+        target_id=workspace_id,
+        metadata=result,
+    )
+    return {"status": "ok", **result}
+
+
 @router.get("/{workspace_id}/memory/items")
 def list_memory_items(
     workspace_id: str,
