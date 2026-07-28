@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { LocaleProvider } from '../i18n'
 import {
+  AttachmentList,
   isImageAttachmentName,
   PendingAttachments,
   type PendingAttachment,
@@ -140,5 +141,109 @@ describe('PendingAttachments', () => {
     const chip = screen.getByTitle('62ab3b44b270fb')
     expect(chip.className).toContain('attach-chip--image')
     expect(chip.querySelector('img.attach-preview-img')).toBeTruthy()
+  })
+})
+
+describe('AttachmentList (sent user turn)', () => {
+  it('right-aligns chips for user messages', () => {
+    const { container } = render(
+      <LocaleProvider>
+        <AttachmentList
+          align="end"
+          items={[
+            {
+              name: 'photo.png',
+              path: 'uploads/photo.png',
+              size: 16000,
+              previewUrl: 'blob:http://localhost/u1',
+            },
+          ]}
+        />
+      </LocaleProvider>,
+    )
+    const strip = container.querySelector('.attach-strip-readonly')
+    expect(strip).toHaveAttribute('data-slot', 'attachment-list')
+    expect(strip?.className).toContain('attach-strip--end')
+  })
+
+  it('shows hover image preview on sent chips', () => {
+    render(
+      <LocaleProvider>
+        <AttachmentList
+          align="end"
+          items={[
+            {
+              name: 'shot.jpg',
+              path: 'uploads/shot.jpg',
+              size: 100,
+              previewUrl: 'blob:http://localhost/shot',
+              mimeType: 'image/jpeg',
+            },
+          ]}
+        />
+      </LocaleProvider>,
+    )
+    const chip = screen.getByTitle('shot.jpg')
+    expect(chip.className).toContain('attach-chip--image')
+    expect(chip.querySelector('img.attach-preview-img')).toHaveAttribute(
+      'src',
+      'blob:http://localhost/shot',
+    )
+  })
+
+  it('opens drawer preview callback for images with fileId', async () => {
+    const user = userEvent.setup()
+    const onPreview = vi.fn()
+    render(
+      <LocaleProvider>
+        <AttachmentList
+          align="end"
+          onPreviewDoc={onPreview}
+          items={[
+            {
+              name: 'photo.png',
+              path: 'uploads/photo.png',
+              size: 1200,
+              fileId: 'img-1',
+              mimeType: 'image/png',
+              previewUrl: 'blob:http://localhost/photo',
+            },
+          ]}
+        />
+      </LocaleProvider>,
+    )
+    await user.click(screen.getByRole('button', { name: 'photo.png' }))
+    expect(onPreview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fileId: 'img-1',
+        name: 'photo.png',
+        mimeType: 'image/png',
+      }),
+    )
+  })
+
+  it('opens drawer preview callback for md/pdf with fileId', async () => {
+    const user = userEvent.setup()
+    const onPreview = vi.fn()
+    render(
+      <LocaleProvider>
+        <AttachmentList
+          align="end"
+          onPreviewDoc={onPreview}
+          items={[
+            {
+              name: 'brief.md',
+              path: 'files/brief.md',
+              size: 40,
+              fileId: 'fid-1',
+            },
+          ]}
+        />
+      </LocaleProvider>,
+    )
+    await user.click(screen.getByRole('button', { name: 'brief.md' }))
+    expect(onPreview).toHaveBeenCalledWith(
+      expect.objectContaining({ fileId: 'fid-1', name: 'brief.md' }),
+    )
   })
 })

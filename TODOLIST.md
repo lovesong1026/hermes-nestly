@@ -8,45 +8,44 @@
 >
 > **规模目标**：50 用户；控制面默认 **SQLite**（可选 PostgreSQL）；**无 pgvector**（进程内 cosine）；Redis / MinIO 可选。
 
-**执行状态（2026-07-19）**：Phase 0–5 **MVP 主链路与产品化 Web UI 已落地**（含 Memory / Skill / **Knowledge** / **Usage** Center）；Phase 6 已补 **深度 healthz**、**k6 10 VU 基线**、**SECURITY_REVIEW checklist**；50 并发正式压测与 Compose CI 仍待。GitHub Actions 已装 `.[web-chat,platform]` 并增加 `platform-saas` job。控制面包名为 **`platform_api/`**（下划线，可 `import`），非计划书中的 `platform-api/`。`startplatform.sh` 默认启用 SQLite 控制面，也可用 `--postgres` 切换 PostgreSQL；未启动 Platform API 时仍可回退 legacy key-only 模式。
+**执行状态（2026-07-23 晚）**：Phase 0–5 MVP + 本批产品缺口已合入：Memory Extractor（flag 默认关）、`web_memory` preference/project、Admin 全局 Skill UI、KC 异步索引、Files 拖拽、Memory Markdown 分栏、request_id 中间件。Phase 6：SECURITY_REVIEW **证据索引**、**k6 50 VU SSE（FakeRunner）**、**Compose CI** 已就绪；**人工签署**与正式报告归档仍靠运维。
 
 | Phase | 状态 | 说明 |
 |-------|------|------|
-| 0 基础设施 | **~98%** | Compose/nginx/Alembic/ORM；**Redis Worker + MinIO 抽象已接**；无 pgvector；**深度 healthz 已做** |
-| 1 身份鉴权 | **~95%** | 注册/登录/bind-key/资料编辑/改密/双路径认证与 chat E2E 已有；进程内登录限流已做 |
-| 2 隔离加固 | **~95%** | UUID 贯穿 + 隔离 E2E；UUID 并发 ContextVar + Legacy→UUID 知识库越权已补测 |
-| 3 文件 RAG | **~98%** | Storage 抽象（local/MinIO）；Redis ingest + sync fallback；**进程内 cosine**（DocumentChunk + KnowledgeChunk） |
-| 4 Memory/Skill/Usage | **~98%** | Memory / Skill / **Usage Center** 已落地；`platform_settings` 运营配置、全量工具埋点待补 |
-| 5 Admin | **~95%** | 用户分页/email 过滤、审计只读 API+UI（`#/admin/audit`）；全局 Skill UI 仍待 |
-| 6 硬化上线 | **~85%** | DEPLOY、备份、update-platform、登录限流、HTTPS Cookie、**深度 healthz**、**k6 10 VU**、**SECURITY_REVIEW.md**；50 VU 正式压测 / 人工签署仍待 |
+| 0 基础设施 | **~99%** | Compose/nginx/Alembic；Redis Worker（ingest+knowledge）；MinIO；深度 healthz；**request_id 中间件** |
+| 1 身份鉴权 | **~95%** | 注册/登录/bind-key/资料/改密/重置密码/双路径 + chat E2E；限流；`revoke_user` / legacy 映射未做 |
+| 2 隔离加固 | **~95%** | UUID + 隔离 E2E；`legacy_user_id_map`、bind-key 后会话统一未做 |
+| 3 文件 RAG | **~99%** | KC create/reindex **异步队列**（无 Redis 同步 fallback）+ UI 轮询 |
+| 4 Memory/Skill/Usage | **~99%** | Extractor Phase 2（pending only）+ `web_memory` 四类 target；Usage 代表埋点 |
+| 5 Admin | **~98%** | 用户/审计 + **`#/admin/skills` 全局 Skill 浏览** |
+| 6 硬化上线 | **~92%** | 证据索引 + k6 50 VU SSE 脚本 + compose-smoke CI；**签署与 50 VU 正式跑数归档待运维** |
 
-**最近交付（2026-07-19）**：`GET /api/v1/healthz` 探测 DB/Redis/MinIO；[`deploy/loadtest`](deploy/loadtest/README.md) k6 10 VU；[`SECURITY_REVIEW.md`](docs/user-guide/SECURITY_REVIEW.md)。（2026-07-18：Knowledge / Usage Center MVP。）
+**最近交付（2026-07-23 晚）**
+
+- Memory Extractor：`PLATFORM_MEMORY_EXTRACTOR=1` → LLM 抽取仅 pending；`web_memory` 支持 preference/project
+- Admin `#/admin/skills`；KC `hermes:knowledge_index` 异步；Files 拖拽上传；Memory MarkdownEditor；`X-Request-ID`
+- 硬化：`SECURITY_REVIEW` 证据索引；`k6-chat-sse.js` + `HERMES_WEB_CHAT_FAKE_RUNNER`；`.github/workflows/compose-smoke.yml`
+
+（同日早些：静态分享 / 混合 web_search / Agent→Files / 附件预览。）
 
 **关键产物**
 
 | 类别 | 路径 |
 |------|------|
-| 控制面 API | `platform_api/`（含 `routers/knowledge.py`、`routers/usage.py`） |
-| 持久化 | `gateway/web/platform/`（`PlatformStore` + ORM models） |
-| 部署 | `deploy/docker-compose.yml`、`deploy/nginx.conf` |
-| 前端 | `web-chat`：`FilesPage`、`KnowledgePage`、`SkillsPage`、`MemoryPage`、`UsagePage`、`AdminPage` |
-| Agent 工具 | `gateway/web/tools/sandboxed_*.py`；用量入口 `gateway/web/usage_tracker.py` |
-| 测试 | `tests/platform/`（含 `test_knowledge_center`、`test_usage_center`） |
-| 文档 | `docs/user-guide/platform-saas.md`、`DEPLOY.md`、`SECURITY_REVIEW.md`、`deploy/loadtest/`、`web-chat/README.md` |
-| 运维脚本 | `scripts/create_admin.py`、`scripts/backup-platform.sh`、`deploy/update-platform.sh` |
+| 控制面 API | `platform_api/`（knowledge / usage / shares / memory / **middleware_logging**） |
+| 持久化 | `gateway/web/platform/` |
+| 部署 | `deploy/`、`compose-smoke.yml`、`deploy/loadtest/k6-chat-sse.js` |
+| 前端 | Files / Knowledge / Skills / Memory / Usage / Admin / AdminSkills / Share |
+| Agent 工具 | `sandboxed_*.py`；`web_search_router.py`；FakeRunner 开关 |
 
 **下一步优先（未做项）**
 
-1. ~~登录速率限制（Redis 计数器）~~ → **已做**：进程内滑动窗口（`platform_api/services/rate_limit.py`）；多机再接 Redis  
-2. ~~Redis 异步 Ingestion Worker + MinIO 对象存储接入~~ → **已做**（SQLite 路径；见 §3.1 / `object_store` / `queue` / `hermes-platform-worker`）  
-3. ~~pgvector cosine~~ → **改为不做 pgvector**；**已做**进程内 cosine + 关键词 fallback（见 §3.4）  
-4. ~~备份脚本、`update-web.sh` 扩展 platform-api~~ → `scripts/backup-platform.sh` + `deploy/update-platform.sh`  
-5. ~~深度 healthz + 10 VU k6 + SECURITY_REVIEW checklist~~ → **已做**（§0.4 / §6.1–6.3）；**人工签署**与 **50 并发正式压测**仍待  
-6. ~~`web-chat` ChatPage 集成测试（mock API）~~ → `ChatPage.test.tsx` + CI `web-chat-verify.yml`
-7. ~~Memory / Skill / Knowledge / Usage Center MVP~~ → **已做**（见 §3.5b、§4.2b、§4.4b、§4.4c）
-8. Usage：全量工具自动埋点 / 硬配额（明确不做于 MVP）
-9. Knowledge Center 建库异步化（follow-up；当前仍同步）
-10. Admin 全局 Skill 浏览 UI（API 已有）
+1. ~~Memory Extractor / web_memory 类别 / Admin Skill / KC 异步 / 体验收尾~~ → **已做**
+2. ~~独立 `#/auth` / 全局 401 / Memory 重置·字符计数 / 软注销 / Skill 中量~~ → **已做**（2026-07-24）
+3. 运维：**签署** SECURITY_REVIEW §6；在 staging 跑通 **50 VU SSE** 并归档报告
+4. Usage 全量工具自动埋点 / 硬配额 → Post-MVP
+5. `platform_settings` 热切换搜索后端 Admin UI → Post-MVP
+6. `legacy_user_id_map` / bind-key 后会话统一（可选）
 
 **图例**：`[ ]` 待做 · `[~]` 进行中 / 部分完成 · `[x]` 完成 · `[-]` 明确不做（MVP 外）
 
@@ -157,7 +156,7 @@ flowchart TD
 
 - [x] `GET /api/v1/healthz` — 深度探测 DB（必选）+ Redis（`REDIS_URL`）+ MinIO（`MINIO_*`）；失败 503 / `degraded`（`platform_api/services/health_checks.py` + `tests/platform/test_healthz.py`）
 - [x] OpenAPI 文档可访问（FastAPI 默认 `/docs`）
-- [ ] 结构化日志（request_id、user_id）
+- [x] 结构化日志（`X-Request-ID` + access log；`platform_api/middleware_logging.py`）
 
 ### 0.5 共享库抽象
 
@@ -218,12 +217,12 @@ flowchart TD
 
 - [x] 新增 `web-chat/src/pages/AuthPage.tsx`（注册 + 登录）
 - [~] `web-chat/src/api.ts` 拆分 — 新增 `platformClient.ts`；`api.ts` 仍服务 Agent Gateway
-- [~] 路由：未登录显示 `AuthPage`；**无独立 `#/auth` hash**（App 级门禁）
+- [x] 路由：未登录 `#/auth`（可 `?mode=register`）；`#/reset-password` 保留；App 级门禁 + hash 规范
 - [x] `AuthPage` 主路径；`KeyPromptModal` 保留为「API Key 登录」
 - [x] Settings 内 bind-key 区块（`upstream_status=pending_bind`）
 - [x] Chat 页：`pending_bind` 无 key 时服务端 403（Settings 引导绑定）
 - [x] i18n 文案（`zh.json` / `en.json`）
-- [~] 401 统一跳转 — App 级 `tryPlatformSession`；**非全局 axios 拦截器**
+- [x] 401 统一跳转 — platform 模式 `platformRequest` / `request` / `streamChat` → `#/auth` + `hermes:unauthorized`
 
 ### 1.5 Workspace API
 
@@ -276,8 +275,8 @@ flowchart TD
 ### 3.1 对象存储
 
 - [x] MinIO bucket 初始化（`object_store.ensure_bucket`；本地 fallback 无需 Compose）
-- [ ] S3 客户端封装（`boto3`）
-- [~] 存储 key 规范 — 当前为 `<workspace>/uploads/{file_id}_{name}` 本地路径
+- [x] S3 客户端封装（`platform_api/services/object_store.py` + `boto3`；未配 MinIO 则本地）
+- [~] 存储 key 规范 — 本地 `<workspace>/uploads/...`；MinIO 时 s3 key（见 `is_s3_storage_key`）
 
 ### 3.2 文件上传 API
 
@@ -327,7 +326,7 @@ flowchart TD
 - [x] 删 File 时清理关联与对应 chunks，空库标 `failed`，有剩余则 reindex
 - [x] UI：`#/knowledge` Knowledge Center（Files → Knowledge → Skills → Memory）
 - [x] 隔离 / 删库保留 File 测试：`tests/platform/test_knowledge_center.py`
-- [x] File ingest Redis Worker（KC 建库仍同步；异步为 follow-up）
+- [x] File ingest Redis Worker；KC 建库/reindex 异步队列 `hermes:knowledge_index`（无 Redis 同步 fallback）+ UI 轮询
 - [ ] `[-]` 真 pgvector cosine（不上 PG 扩展）
 
 ### 3.6 前端文件管理 UI
@@ -339,6 +338,8 @@ flowchart TD
 - [x] 创建时间列；文件夹与文件同列表；标签管理独立页 `#/file-tags`
 - [x] Tabs：全部 / 文件 / 图片；新建下拉（文件夹、上传、上传并检索）
 - [x] 后端 `file_folders` + `files.folder_id` + `kind=image|document`
+- [x] Agent `web_file_write`/`patch`（`files/`、`uploads/`）成功后登记 `FileRecord`（`origin=agent`），Files UI 可见（`upsert_sandbox_file` + `test_agent_file_bridge.py`）
+- [x] Chat 附件：用户气泡右对齐；图片悬停预览；md/pdf/图片点开右侧 Drawer
 
 ---
 
@@ -355,18 +356,19 @@ flowchart TD
 
 - [x] `web-chat/src/pages/MemoryPage.tsx`
 - [x] 长期记忆 / 用户画像编辑区 + 保存（已升级为 Memory Center）
-- [~] 重置 / 字符计数（**未做**）
+- [x] 重置 / 字符计数（`POST .../memory/reset` + stats.limits + Dialog 计数）
 - [x] 路由 `#/memory`
 
 ### 4.2b Memory Center MVP
 
 - [x] `memory_items` 表 + Alembic `002_memory_items`
 - [x] `platform_api/services/memory_center.py` — CRUD / approve / reject / 投影 md
-- [x] API：`/memory/items`、`/memory/stats`、approve、reject、migrate-from-files
+- [x] API：`/memory/items`、`/memory/stats`、approve、reject、migrate-from-files、**reset**
 - [x] Memory Center UI：Profile / Preferences / Projects / Pending / All
 - [x] `web_memory` 工具替换 hermes-web-chat 的 `memory`（仅 pending）
-- [x] Extractor stub + `PLATFORM_MEMORY_EXTRACTOR` feature flag（默认关）
-- [ ] 聊天后 LLM Memory Extractor（pending only）— Phase 2
+- [x] `web_memory` 类别：`user`→profile、`preference`/`project`、`memory`→knowledge
+- [x] Extractor + `PLATFORM_MEMORY_EXTRACTOR`（默认关；开则 pending only）
+- [x] 聊天后 LLM Memory Extractor（pending only）— Phase 2
 
 ### 4.3 Skill 配置 API
 
@@ -392,7 +394,7 @@ flowchart TD
 - [x] enable / disable API + Skill Center UI（配置 Dialog）
 - [x] skill hint 改为 `web_skill_view` / `web_skills_list`
 - [x] mutate 路径 AuditLog（`skills.*`）
-- [ ] Skill Router / 使用日志产品化（后续）
+- [x] Skill list entitlement 对齐 + skill 工具埋点收尾（中量；非意图 Router）
 
 ### 4.4c Usage Center MVP
 
@@ -401,22 +403,33 @@ flowchart TD
 - [x] API：`/usage/summary|trend|by-model|by-skill|logs`；`POST /usage/record` → 403
 - [x] Chat turn done → `track_chat_turn`（不改 `run_agent.py`）
 - [x] 代表工具埋点：`web_skill_view` / `web_skill_install` / `web_knowledge_search`
+- [x] skill 全工具埋点：list / view / install / edit / patch / delete
 - [x] UI：`#/usage` + Settings / AccountMenu 入口；与 `/billing/*` 并存
 - [x] 测试：`tests/platform/test_usage_center.py`
-- [ ] 全量工具自动埋点 / 硬配额拦截（后续）
+- [x] SPA 主展示改为第三方 log 代理：`GET /usage-log/overview|logs`（绑定 sk；本地账本保留）
+- [ ] 硬配额拦截（后续）
 
 ### 4.5 Agent 启动时 Skill Hint 注入
 
 - [x] `web_chat.py::_build_skill_hint()` 读取 enabled skills
 - [x] 附加 ephemeral `system_prompt` 片段
 - [x] 未修改 `prompt_builder.py`
-- [ ] 测试：启用 skill 后 agent 主动调用 `web_skills_list`
+- [x] 测试：启用 skill 后 hint 含 `web_skills_list` 优先契约（`test_web_skill_hint.py`）
 
 ### 4.6 Web Search（P1，已有能力，仅补运营配置）
 
-- [x] `web_search` / `web_extract` 在 `hermes-web-chat` 中默认可用
+- [x] `web_search` / `web_extract` 在 `hermes-web-chat` 中默认可用（零 key：`ddgs` + `http-fetch`）
+- [x] 混合路由：Brave-first + ddgs fallback + 每用户配额（`web_search_router.py`）
+- [x] UI：来源卡片、配额/Usage 反馈（`WebSearchSources`）
 - [ ] Admin `platform_settings` 热切换 backend
 - [~] 文档：`platform-saas.md` 提及；**无独立运营切换指南**
+
+### 4.7 静态分享（只读快照）
+
+- [x] `share_snapshots` 表 + Alembic `005_share_snapshots`
+- [x] `POST /api/v1/shares`（登录）+ `GET /api/v1/shares/{token}`（匿名只读）
+- [x] SPA：`ConfirmShareDialog`、`#/share/{token}` SharePage；对话级 + 单条回复
+- [x] 测试：`tests/platform/test_shares.py` + SharePage / ConfirmShareDialog vitest
 
 ---
 
@@ -437,8 +450,8 @@ flowchart TD
 - [x] 用户表格 + 禁用/启用 + email 搜索 + 分页
 - [x] 基础统计
 - [x] `#/admin/audit` 审计只读页（`AdminAuditPage`）
-- [~] 全局 Skill 浏览（API 有，**UI 未单独展示 skill 列表**）
-- [x] 路由 `#/admin` / `#/admin/audit`
+- [x] 全局 Skill 浏览（`#/admin/skills` + `AdminSkillsPage`）
+- [x] 路由 `#/admin` / `#/admin/audit` / `#/admin/skills`
 
 ### 5.3 种子数据
 
@@ -466,7 +479,7 @@ flowchart TD
 ### 6.3 性能
 
 - [x] 压测基线：10 VU k6（[`deploy/loadtest`](deploy/loadtest/README.md)；不含 LLM chat）
-- [ ] 压测：50 并发用户正式报告（含聊天 SSE）
+- [x] 压测脚本：50 VU SSE（`k6-chat-sse.js` + `HERMES_WEB_CHAT_FAKE_RUNNER`）；**正式跑数/报告归档待运维**
 - [ ] 监控 SQLite WAL 延迟
 - [ ] `[-]` pgvector 检索基准（不上 PG 扩展）
 
@@ -483,7 +496,7 @@ flowchart TD
 - [x] `tests/platform/` 纳入 `scripts/run_tests.sh`
 - [x] GitHub Actions 安装 `.[web-chat,platform]`；`platform-saas` job 跑 `tests/platform` + `test_web_*` + user_id 隔离
 - [x] `web-chat-verify.yml`（`npm run verify`）
-- [ ] Docker Compose 集成测试 job（GitHub Actions）
+- [x] Docker Compose 集成测试 job（`.github/workflows/compose-smoke.yml`）
 
 ---
 
@@ -500,40 +513,43 @@ flowchart TD
 ### 文件与知识库
 
 - [x] 上传 PDF / Word / Excel / PPT（+ TXT / MD）
-- [~] 解析进度展示（~~无实时进度 UI~~ → Files 页轮询 status + 状态徽章）
-- [x] 「我的文件」列表与删除
+- [x] 解析进度展示（Files 页轮询 status + 状态徽章）
+- [x] 「我的文件」列表与删除；Agent 写入文件可见
 - [x] Agent 通过 `web_knowledge_search` 检索个人知识库
+- [x] Knowledge Center 建库 / 试搜 / reindex
 
 ### Agent 能力
 
 - [~] Hermes 对话（需 bind-key 或 AutoProvisioner 成功；`pending_bind` 时 chat 403）
-- [x] Memory 读取与 Web 编辑
+- [x] Memory Center 读写 / 批准 pending（`web_memory`）；Extractor 默认关（`PLATFORM_MEMORY_EXTRACTOR`）
 - [x] Skill 启用/禁用与查看
-- [x] Web Search / Web Extract
+- [x] Web Search / Web Extract（Brave 可选 + ddgs 默认）
+- [x] 静态分享只读链接（对话 / 单条）
 
 ### 管理
 
 - [x] Admin 用户列表与禁用/启用
-- [~] Admin 全局 Skill 库浏览（API 有，UI 简版）
+- [x] Admin 全局 Skill 库浏览 UI（`#/admin/skills`）
 - [x] Admin 存储用量概览（stats：users/files/chunks）
+- [x] Admin 审计日志只读页
 
 ---
 
 ## web-chat SPA — 用户体验待办（按人气 × 实用度）
 
-> **现状快照（2026-07-16）**：Chat 核心链路与 Platform 工作台已经进入可用状态。现有 UI 覆盖 Auth、Chat、Settings、Files/Tags、Memory、Skills、Admin，并完成响应式导航、Onboarding、会话搜索、主题/字号、模型选择、附件与文件预览、文件标签管理、用量展示等产品化体验。剩余工作主要是基础设施异步化、检索质量、Admin 深化和上线硬化。
+> **现状快照（2026-07-23）**：Chat + Platform 工作台可用；Auth / Chat / Settings / Files / Knowledge / Skills / Memory / Usage / Admin / **Share** 均已接通。P0–P1 产品化缺口（引导、移动侧栏、分享、主题、改密、模型偏好等）基本关闭。剩余重点：**Memory 自动抽取**、Admin Skill UI、KC 异步建库、上线硬化（签署 / 50 VU / Compose CI）。
 
 **排序说明**：P0 = 多数用户每天都会碰到且明显影响留存；P1 = ChatGPT 类产品的常见预期；P2 = 提升专业用户/运营效率；P3 = 锦上添花。与 § MVP 明确不做 冲突的项（PWA、OAuth、多 Workspace UI）不列入。
 
-### P0 — 高人气 × 高实用（建议下一迭代）
+### P0 — 高人气 × 高实用（✅ 本批已完成）
 
-| 优先级 | 功能 | 用户痛点 | 现状 / 缺口 |
-|--------|------|----------|-------------|
-| ★★★ | **`pending_bind` 全局引导** | 注册后发消息遇 403，不知要去设置页绑 key | 仅 Settings 有 bind 表单；Chat 无顶栏警告 |
-| ★★★ | **移动端会话侧栏** | ≤720px 侧栏 `display:none`，无法切换/新建对话 | `styles.css` 隐藏 `.chat-side` 且无抽屉按钮 |
-| ★★★ | **对话列表搜索** | 会话多了找不到历史 | 无标题/预览过滤 |
-| ★★☆ | **知识库解析进度 UI** | 上传后不知是否在索引 | API 有 `status`；Files 页只显示静态文案 |
-| ★★☆ | **注册后 Onboarding** | 新用户不知道下一步（绑 key → 首条消息） | 注册成功直接进 Chat，无分步引导 |
+| 优先级 | 功能 | 状态 |
+|--------|------|------|
+| ★★★ | `pending_bind` 全局引导 | [x] |
+| ★★★ | 移动端会话侧栏 | [x] |
+| ★★★ | 对话列表搜索 | [x] |
+| ★★☆ | 知识库解析进度 UI | [x] Files 轮询 status |
+| ★★☆ | 注册后 Onboarding | [x] |
 
 - [x] Chat / App 顶栏：`upstream_status=pending_bind` 时展示可点击的绑定引导（跳转 Settings）
 - [x] 移动端：汉堡菜单 + 会话抽屉（新建 / 切换 / 归档入口）
@@ -571,7 +587,7 @@ flowchart TD
 | ★★☆ | ~~**Skill 详情预览**~~ | Skill Center：列表 / 预览 / 创建 / enable（已完成） |
 | ★★☆ | ~~**Admin 分页 + 用户搜索**~~ | `AdminPage` + `GET /admin/users?limit&offset&email` |
 | ★☆☆ | ~~**Admin 审计日志 UI**~~ | `#/admin/audit` + `GET /admin/audit` |
-| ★☆☆ | **Admin 全局 Skill 浏览** | API `GET /admin/skills` 已有；UI 未展示 |
+| ★☆☆ | ~~**Admin 全局 Skill 浏览**~~ | `#/admin/skills` 已完成 |
 
 - [x] Settings：用量卡片（余额 / 日志，代理 new-api）+ 链入 Usage Center
 - [x] `FilesPage` 试搜 + `KnowledgePage` 建库 / 试搜 / reindex
@@ -579,32 +595,36 @@ flowchart TD
 - [x] App：顶栏固定，主内容区独立滚动
 - [x] `SkillsPage`：Skill Center（我的 / 全局库 / 创建 / 配置）
 - [x] `UsagePage`：今日/本月、趋势、按模型/技能、明细日志
-- [ ] Admin：全局 Skill 浏览（可与 Skills catalog 共用扫描逻辑）
+- [x] Admin：全局 Skill 浏览（`#/admin/skills`）
 - [x] `AdminPage`：email 过滤、分页控件；后端 `limit/offset/email`
 - [x] `AdminPage`：`#/admin/audit` 只读表格（时间、操作、目标）
-- [ ] `AdminPage`：全局 Skill 只读列表（调用 `platform.adminSkills()`）
+- [x] `AdminPage`：全局 Skill 只读列表（`platform.adminSkills()`）
 
 ### P3 — 体验抛光
 
 - [x] 全局 Sonner Toast 基础设施与关键操作非阻塞提示
-- [ ] `MemoryPage`：Markdown 预览分栏（编辑 | 预览）
-- [~] `FilesPage`：已有上传百分比进度；拖拽上传区待补
+- [x] `MemoryPage`：Markdown 预览分栏（编辑 | 预览；`MarkdownEditor`）
+- [x] `FilesPage`：上传百分比 + 列表区拖拽上传（默认存档；Alt=ingest）
+- [x] Chat 附件芯片右对齐 + 悬停/Drawer 预览（图 / md / pdf）
+- [x] Knowledge 列表卡片间距疏朗化
 - [x] 键盘快捷键面板（`?`）：发送、新建对话、聚焦输入框
-- [ ] 账户：修改邮箱、注销账号（需 API + 合规文案）
+- [x] 账户：修改邮箱（`PATCH /auth/me` + 保存前确认）；软注销（`POST /auth/deactivate`）
 - [x] 无障碍：焦点陷阱、跳过导航、`aria-live` 流式区域
 - [x] 更新 `web-chat/README.md`（移除不存在的 `QuotaBadge` 描述，对齐实际页面树）
+- [x] Platform API 结构化日志 / `X-Request-ID`
+- [x] 独立 `#/auth` hash + fetch 层 401 → `#/auth`（platform 模式）
 
 ### 已有能力（无需重复立项）
 
 - [x] SSE 流式、停止生成、token 用量展示
-- [x] 消息复制 / 重试 / 编辑
-- [x] 工具事件折叠、`image_generate` 缩略图
+- [x] 消息复制 / 重试 / 编辑 / **静态分享** / 导出 Markdown
+- [x] 工具事件折叠、`image_generate` 缩略图、**web_search 来源卡片**
 - [x] 推理过程 `ReasoningPanel`、活动日志 `ActivityLog`
 - [x] 斜杠命令补全、会话置顶/归档/重命名/删除
 - [x] 中英双语 `LanguageToggle`
-- [x] Platform 六路由 + Legacy Key 备路径
+- [x] Platform 工作台路由 + Legacy Key 备路径 + `#/share/{token}`
 - [x] Account 下拉主题/字号快捷设置，Settings 完整偏好设置
-- [x] 文件夹、分类、标签、内容预览与「引用到对话」
+- [x] 文件夹、分类、标签、内容预览与「引用到对话」；Agent 写入文件可见于 Files
 
 ---
 
@@ -672,6 +692,7 @@ flowchart TD
 | GET | `/auth/me` | 1 | [x] |
 | PATCH | `/auth/me` | 1 | [x] 资料 / 头像 |
 | POST | `/auth/change-password` | 1 | [x] |
+| POST | `/auth/deactivate` | 1 | [x] 软注销 |
 | POST | `/auth/forgot-password` | 1 | [x] |
 | POST | `/auth/reset-password` | 1 | [x] |
 | GET | `/billing/usage`、`/billing/logs` | 1 | [x] |
@@ -703,7 +724,8 @@ flowchart TD
 | POST | `/usage/record` | 4 | [x] 对外 403（仅 Tracker） |
 | GET | `/workspaces/{id}/memory` | 4 | [x] legacy md |
 | PATCH | `/workspaces/{id}/memory` | 4 | [x] legacy md |
-| GET | `/workspaces/{id}/memory/stats` | 4 | [x] Memory Center |
+| GET | `/workspaces/{id}/memory/stats` | 4 | [x] Memory Center（含 limits） |
+| POST | `/workspaces/{id}/memory/reset` | 4 | [x] 清空条目 + 投影 |
 | GET/POST | `/workspaces/{id}/memory/items` | 4 | [x] |
 | PUT/DELETE | `/workspaces/{id}/memory/items/{id}` | 4 | [x] |
 | POST | `/workspaces/{id}/memory/items/{id}/approve|reject` | 4 | [x] |
@@ -718,8 +740,11 @@ flowchart TD
 | PATCH | `/admin/users/{id}` | 5 | [x] |
 | GET | `/admin/stats` | 5 | [x] |
 | GET | `/admin/skills` | 5 | [x] |
+| GET | `/admin/audit` | 5 | [x] |
+| POST | `/shares` | 4 | [x] 创建不可变快照（需登录） |
+| GET | `/shares/{token}` | 4 | [x] 匿名只读 |
 
-### Agent Gateway (`/api/`，已有 + 改造)
+### Agent Gateway (`/api/`，已有 + 改造）
 
 | 方法 | 路径 | 状态 |
 |------|------|------|
@@ -783,3 +808,6 @@ flowchart TD
 | 2026-07-18 | **Knowledge Center MVP**：`knowledge_*` 表、`/knowledge-bases*`、`#/knowledge`；Agent `web_knowledge_search` 改搜 `knowledge_chunks` |
 | 2026-07-18 | **Usage Center MVP**：`usage_records`、`/usage/*`、`usage_tracker`、`#/usage`；chat/skill/knowledge 埋点；与 new-api billing 并存 |
 | 2026-07-19 | **Phase 6 硬化切片**：深度 `/api/v1/healthz`；`deploy/loadtest` k6 10 VU；`SECURITY_REVIEW.md` 可签署 checklist |
+| 2026-07-23 | **静态分享**：`/shares` + `#/share/{token}`；**混合 web_search**（Brave+ddgs+配额）；**Agent→Files**（`origin=agent`）；Chat 附件预览 UX；Knowledge 卡片疏朗；刷新「下一步优先」 |
+| 2026-07-23 | **下一步交付**：Memory Extractor Phase 2 + `web_memory` preference/project；Admin Skills UI；KC 异步索引；Files 拖拽 / Memory Markdown / request_id；SECURITY_REVIEW 证据索引；k6 50 VU SSE + FakeRunner；Compose CI |
+| 2026-07-24 | **SPA 收尾**：`#/auth` + 401 跳转；Memory reset/字符计数；软注销 deactivate；Skill list entitlement + 全工具埋点 + hint 契约测试 |

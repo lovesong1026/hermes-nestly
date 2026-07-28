@@ -64,27 +64,21 @@ describe('AuthPage', () => {
     vi.clearAllMocks()
   })
 
-  it('renders login form and submits credentials', async () => {
-    const user = userEvent.setup()
-    vi.mocked(platform.login).mockResolvedValue({
-      user: { user_id: 'u1', email: 'a@b.com' },
-    })
-    const { onSuccess } = renderAuth()
-
-    await user.type(screen.getByLabelText(/email/i), 'a@b.com')
-    await user.type(screen.getByLabelText(/password/i), 'password123')
-    await user.click(screen.getByRole('button', { name: /continue/i }))
-
-    expect(platform.login).toHaveBeenCalledWith('a@b.com', 'password123')
-    expect(onSuccess).toHaveBeenCalled()
-  })
-
-  it('switches to API key login and submits', async () => {
+  it('defaults to API key form and submits the key', async () => {
     const user = userEvent.setup()
     vi.mocked(auth.login).mockResolvedValue({ user_id: 'legacy-u' })
     const { onLegacySuccess } = renderAuth()
 
-    await user.click(screen.getByRole('button', { name: /use api key/i }))
+    expect(
+      screen.getByText(/enter your api key to get started/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /account sign-in/i }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByText(/wechat: contact alz-ai/i),
+    ).toBeInTheDocument()
+
     await user.type(screen.getByLabelText(/api key/i), 'sk-test')
     await user.click(screen.getByRole('button', { name: /^sign in$/i }))
 
@@ -92,23 +86,17 @@ describe('AuthPage', () => {
     expect(onLegacySuccess).toHaveBeenCalledWith('legacy-u')
   })
 
-  it('can switch back to account login from API key form', async () => {
-    const user = userEvent.setup()
+  it('does not show admin paste hint on the API key form', () => {
     renderAuth()
-
-    await user.click(screen.getByRole('button', { name: /use api key/i }))
-    expect(screen.getByLabelText(/api key/i)).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: /account sign-in/i }))
-    expect(screen.getByLabelText(/email/i)).toBeInTheDocument()
+    expect(screen.queryByText(/administrator issued/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/粘贴管理员/)).not.toBeInTheDocument()
   })
 
   it('submits forgot-password and shows confirmation', async () => {
     const user = userEvent.setup()
     vi.mocked(platform.forgotPassword).mockResolvedValue({ status: 'ok' })
-    renderAuth()
+    renderAuth({ initialMode: 'forgot' })
 
-    await user.click(screen.getByRole('button', { name: /forgot password/i }))
     await user.type(screen.getByLabelText(/email/i), 'a@b.com')
     await user.click(
       screen.getByRole('button', { name: /send reset email/i }),
@@ -120,7 +108,7 @@ describe('AuthPage', () => {
     })
   })
 
-  it('submits reset-password with token then returns to login', async () => {
+  it('submits reset-password with token then returns to API key login', async () => {
     const user = userEvent.setup()
     vi.mocked(platform.resetPassword).mockResolvedValue({ status: 'ok' })
     renderAuth({ initialMode: 'reset', resetToken: 'tok-xyz' })
@@ -132,9 +120,7 @@ describe('AuthPage', () => {
 
     expect(platform.resetPassword).toHaveBeenCalledWith('tok-xyz', 'newpass99')
     await waitFor(() => {
-      expect(
-        screen.getByText(/password updated|sign in with your new/i),
-      ).toBeInTheDocument()
+      expect(screen.getByLabelText(/api key/i)).toBeInTheDocument()
     })
   })
 })

@@ -21,6 +21,10 @@ describe('fileOriginLabelKey', () => {
     expect(fileOriginLabelKey('chat')).toBe('files.origin.chat')
   })
 
+  it('maps agent origin to the agent label key', () => {
+    expect(fileOriginLabelKey('agent')).toBe('files.origin.agent')
+  })
+
   it('maps platform / missing origin to workspace', () => {
     expect(fileOriginLabelKey('platform')).toBe('files.origin.workspace')
     expect(fileOriginLabelKey(undefined)).toBe('files.origin.workspace')

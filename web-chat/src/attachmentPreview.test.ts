@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  canOpenAttachmentDrawer,
   fetchWorkspaceImagePreviewUrl,
   isDrawerPreviewableName,
   isImageAttachment,
@@ -46,6 +47,28 @@ describe('attachment preview helpers', () => {
     expect(workspacePreviewKind('a.pdf')).toBe('pdf')
     expect(workspacePreviewKind('a.md')).toBe('md')
     expect(workspacePreviewKind('a.docx')).toBe(null)
+    expect(
+      workspacePreviewKind('62ab3b44b270fb', { mimeType: 'image/png' }),
+    ).toBe('image')
+  })
+
+  it('opens drawer for images and docs when fileId is present', () => {
+    expect(
+      canOpenAttachmentDrawer('shot.png', { fileId: 'f1' }),
+    ).toBe(true)
+    expect(
+      canOpenAttachmentDrawer('notes.md', { fileId: 'f2' }),
+    ).toBe(true)
+    expect(
+      canOpenAttachmentDrawer('opaque', {
+        fileId: 'f3',
+        mimeType: 'image/jpeg',
+      }),
+    ).toBe(true)
+    expect(canOpenAttachmentDrawer('shot.png', {})).toBe(false)
+    expect(
+      canOpenAttachmentDrawer('sheet.xlsx', { fileId: 'f4' }),
+    ).toBe(false)
   })
 
   it('probes extensionless library files but skips known documents', () => {

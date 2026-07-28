@@ -397,6 +397,46 @@ def _ensure_user_skill(name: str) -> Tuple[Optional[Path], bool, Optional[str]]:
 # ── Handlers ───────────────────────────────────────────────────────────
 
 
+def _track_skill(
+    user_id: str,
+    *,
+    skill_name: Optional[str],
+    tool_name: str,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Best-effort Usage Center hook for skill tools."""
+    try:
+        from gateway.web.usage_tracker import track
+
+        track(
+            user_id,
+            "skill",
+            skill_name=skill_name,
+            tool_name=tool_name,
+            metadata=metadata or {},
+        )
+    except Exception:
+        pass
+
+
+def _enabled_skill_names_or_none() -> Optional[set[str]]:
+    """When PlatformStore is available, return enabled skill names; else None (no filter)."""
+    ws = get_user_workspace()
+    if ws is None:
+        return None
+    user_id = ws.name
+    try:
+        from gateway.web.platform.store import PlatformStore
+        from platform_api.deps import get_store
+
+        store = get_store()
+        if not isinstance(store, PlatformStore):
+            return None
+        return set(store.list_enabled_skill_names(user_id))
+    except Exception:
+        return None
+
+
 def _handle_web_skills_list(args: Dict[str, Any], **kw: Any) -> str:
     ws = get_user_workspace()
     if ws is None:
@@ -446,7 +486,18 @@ def _handle_web_skills_list(args: Dict[str, Any], **kw: Any) -> str:
                 "source": "global",
             })
 
+    # Align with chat skill hint: hide SkillEntitlement.enabled=False.
+    enabled = _enabled_skill_names_or_none()
+    if enabled is not None:
+        skills = [s for s in skills if s["name"] in enabled]
+
     categories = sorted({s["category"] for s in skills})
+    _track_skill(
+        ws.name,
+        skill_name=None,
+        tool_name="web_skills_list",
+        metadata={"count": len(skills), "source_filter": source_filter},
+    )
     return _json({
         "success": True,
         "skills": skills,
@@ -511,19 +562,13 @@ def _handle_web_skill_view(args: Dict[str, Any], **kw: Any) -> str:
     except OSError as exc:
         return _json({"success": False, "error": f"could not read skill file: {exc}"})
 
-    # Usage Center: skill view (representative skill tool hook)
-    try:
-        from gateway.web.usage_tracker import track
-
-        track(
-            ws.name,
-            "skill",
-            skill_name=name,
-            tool_name="web_skill_view",
-            metadata={"source": source},
-        )
-    except Exception:
-        pass
+    # Usage Center: skill view
+    _track_skill(
+        ws.name,
+        skill_name=name,
+        tool_name="web_skill_view",
+        metadata={"source": source},
+    )
 
     return _json({
         "success": True,
@@ -653,18 +698,12 @@ def _handle_web_skill_install(args: Dict[str, Any], **kw: Any) -> str:
     # per-skill MAX_SKILL_BYTES caps above bound the per-tenant disk
     # footprint without any local accounting.
 
-    try:
-        from gateway.web.usage_tracker import track
-
-        track(
-            ws.name,
-            "skill",
-            skill_name=name,
-            tool_name="web_skill_install",
-            metadata={"category": category},
-        )
-    except Exception:
-        pass
+    _track_skill(
+        ws.name,
+        skill_name=name,
+        tool_name="web_skill_install",
+        metadata={"category": category},
+    )
 
     return _json({
         "success": True,
@@ -712,6 +751,12 @@ def _handle_web_skill_delete(args: Dict[str, Any], **kw: Any) -> str:
 
     deleted_bytes = sum(p.stat().st_size for p in skill_dir.rglob("*") if p.is_file())
     shutil.rmtree(skill_dir)
+    _track_skill(
+        ws.name,
+        skill_name=name,
+        tool_name="web_skill_delete",
+        metadata={"deleted_bytes": deleted_bytes},
+    )
     return _json({
         "success": True,
         "name": name,
@@ -771,6 +816,12 @@ def _handle_web_skill_edit(args: Dict[str, Any], **kw: Any) -> str:
         })
 
     target.write_bytes(skill_md_bytes)
+    _track_skill(
+        ws.name,
+        skill_name=name,
+        tool_name="web_skill_edit",
+        metadata={"forked": forked, "bytes_written": len(skill_md_bytes)},
+    )
     return _json({
         "success": True,
         "name": name,
@@ -892,6 +943,12 @@ def _handle_web_skill_patch(args: Dict[str, Any], **kw: Any) -> str:
         })
 
     target.write_bytes(updated_bytes)
+    _track_skill(
+        ws.name,
+        skill_name=name,
+        tool_name="web_skill_patch",
+        metadata={"forked": forked, "file_path": rel_label, "replacements": replacements},
+    )
     return _json({
         "success": True,
         "name": name,
@@ -1172,13 +1229,25 @@ _REGISTRATIONS: tuple[tuple[str, Dict[str, Any], Callable], ...] = (
 
 def _register_all() -> None:
     """Idempotent registration — safe if the module is imported twice."""
+    from gateway.web.path_privacy import scrub_host_paths
+
+    def _wrap(handler: Callable) -> Callable:
+        def wrapped(args, **kw):
+            result = handler(args, **kw)
+            if isinstance(result, str):
+                return scrub_host_paths(result)
+            return result
+
+        wrapped.__name__ = getattr(handler, "__name__", "wrapped")
+        return wrapped
+
     for name, schema, handler in _REGISTRATIONS:
         try:
             registry.register(
                 name=name,
                 toolset=_TOOLSET,
                 schema=schema,
-                handler=handler,
+                handler=_wrap(handler),
                 max_result_size_chars=100_000,
             )
         except Exception:

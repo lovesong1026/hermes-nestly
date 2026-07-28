@@ -16,7 +16,6 @@ import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
@@ -43,7 +42,10 @@ export function AuthPage({
   resetToken = null,
 }: Props) {
   const t = useT()
-  const [method, setMethod] = useState<Method>('account')
+  // 首次进入默认 API Key；仅忘记/重置密码走账号表单（无「账号登录」入口）。
+  const [method, setMethod] = useState<Method>(() =>
+    initialMode === 'forgot' || initialMode === 'reset' ? 'account' : 'apikey',
+  )
   const [mode, setMode] = useState<AccountMode>(
     initialMode === 'reset' && !resetToken ? 'forgot' : initialMode,
   )
@@ -54,20 +56,27 @@ export function AuthPage({
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
 
-  const switchMethod = (next: Method) => {
-    setMethod(next)
-    setError(null)
-    setInfo(null)
-  }
-
   const goLogin = () => {
+    setMethod('apikey')
     setMode('login')
     setError(null)
     setInfo(null)
     setPassword('')
-    if (window.location.hash.includes('reset-password')) {
-      window.location.hash = '#/chat'
+    // 重置密码页结束后回到登录 hash，避免停在 reset-password
+    if (
+      window.location.hash.includes('reset-password') ||
+      !window.location.hash.includes('/auth')
+    ) {
+      window.location.hash = '#/auth'
     }
+  }
+
+  const setAccountMode = (next: 'login' | 'register') => {
+    setMode(next)
+    setError(null)
+    setInfo(null)
+    window.location.hash =
+      next === 'register' ? '#/auth?mode=register' : '#/auth'
   }
 
   const submitAccount = async (e: FormEvent) => {
@@ -126,9 +135,10 @@ export function AuthPage({
     try {
       await platform.resetPassword(resetToken, password)
       setInfo(t('auth.reset.ok'))
+      setMethod('apikey')
       setMode('login')
       setPassword('')
-      window.location.hash = '#/chat'
+      window.location.hash = '#/auth'
     } catch (err) {
       if (err instanceof PlatformApiError) {
         setError(err.message)
@@ -268,9 +278,7 @@ export function AuthPage({
               <Tabs
                 value={mode === 'register' ? 'register' : 'login'}
                 onValueChange={(v) => {
-                  setMode(v as 'login' | 'register')
-                  setError(null)
-                  setInfo(null)
+                  setAccountMode(v as 'login' | 'register')
                 }}
                 className="w-full"
               >
@@ -339,9 +347,6 @@ export function AuthPage({
             </>
           ) : (
             <form onSubmit={submitApiKey} className="space-y-4">
-              <p className="text-muted-foreground text-sm leading-relaxed">
-                {t('keymodal.sub.first')}
-              </p>
               <div className="space-y-2">
                 <Label htmlFor="auth-apikey">{t('keymodal.label.apikey')}</Label>
                 <Input
@@ -374,32 +379,6 @@ export function AuthPage({
             </form>
           )}
         </CardContent>
-
-        {mode !== 'forgot' && mode !== 'reset' && (
-          <CardFooter className="justify-center border-t border-border/60 pt-4">
-            {method === 'account' ? (
-              <Button
-                type="button"
-                variant="link"
-                className="text-muted-foreground h-auto p-0 text-sm"
-                disabled={busy}
-                onClick={() => switchMethod('apikey')}
-              >
-                {t('auth.switchToApiKey')}
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                variant="link"
-                className="text-muted-foreground h-auto p-0 text-sm"
-                disabled={busy}
-                onClick={() => switchMethod('account')}
-              >
-                {t('auth.switchToAccount')}
-              </Button>
-            )}
-          </CardFooter>
-        )}
       </Card>
     </div>
   )

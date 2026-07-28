@@ -1,0 +1,78 @@
+name: Compose smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/docker-compose.yml'
+      - 'deploy/**'
+      - 'platform_api/**'
+      - '.github/workflows/compose-smoke.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'deploy/docker-compose.yml'
+      - 'deploy/**'
+      - 'platform_api/**'
+      - '.github/workflows/compose-smoke.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compose-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compose-deps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Start postgres / redis / minio
+        run: |
+          docker compose -f deploy/docker-compose.yml up -d postgres redis minio
+          for i in $(seq 1 30); do
+            if docker compose -f deploy/docker-compose.yml exec -T postgres \
+              pg_isready -U hermes -d hermes_platform; then
+              break
+            fi
+            sleep 2
+          done
+          docker compose -f deploy/docker-compose.yml exec -T postgres \
+            pg_isready -U hermes -d hermes_platform
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86  # v5
+
+      - name: Set up Python 3.11
+        run: uv python install 3.11
+
+      - name: Install platform extras
+        run: |
+          uv venv .venv --python 3.11
+          source .venv/bin/activate
+          uv pip install -e ".[platform,web-chat,dev]"
+
+      - name: Platform smoke against Compose Postgres
+        run: |
+          source .venv/bin/activate
+          scripts/run_tests.sh \
+            tests/platform/test_healthz.py \
+            tests/platform/test_request_id.py \
+            tests/platform/test_auth_register.py
+        env:
+          PLATFORM_DATABASE_URL: postgresql+psycopg://hermes:hermes@127.0.0.1:5432/hermes_platform
+          REDIS_URL: redis://127.0.0.1:6379/0
+          MINIO_ENDPOINT: 127.0.0.1:9000
+          MINIO_ACCESS_KEY: minio
+          MINIO_SECRET_KEY: minio12345
+          MINIO_BUCKET: hermes-uploads
+          OPENROUTER_API_KEY: ""
+          OPENAI_API_KEY: ""
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f deploy/docker-compose.yml down -v

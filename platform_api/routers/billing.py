@@ -2,20 +2,20 @@
 
 from __future__ import annotations
 
-import os
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 
 from gateway.web.platform.store import PlatformStore
 from platform_api.deps import get_current_user_id, get_store, get_vault
+from platform_api.services.new_api_billing import admin_base_url, fetch_token_usage
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
 
 def _new_api_base() -> str:
-    base = (os.environ.get("NEW_API_BASE_URL") or "").strip().rstrip("/")
+    base = admin_base_url()
     if not base:
         raise HTTPException(status_code=503, detail="NEW_API_BASE_URL not configured")
     return base
@@ -38,25 +38,14 @@ def _decrypt_upstream_key(user_id: str) -> str:
 def get_usage(user_id: str = Depends(get_current_user_id)) -> dict[str, Any]:
     """Return quota for the user's bound new-api token (no raw key)."""
     api_key = _decrypt_upstream_key(user_id)
-    base = _new_api_base()
     try:
         with httpx.Client(timeout=15.0) as client:
-            resp = client.get(
-                f"{base}/api/usage/token",
-                headers={"Authorization": f"Bearer {api_key}"},
-            )
+            data = fetch_token_usage(client, api_key=api_key)
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    if resp.status_code == 401:
-        raise HTTPException(status_code=401, detail="upstream key rejected")
-    if resp.status_code != 200:
-        raise HTTPException(status_code=502, detail=resp.text[:500])
-
-    payload = resp.json()
-    data = payload.get("data") if isinstance(payload, dict) else None
-    if not isinstance(data, dict):
-        raise HTTPException(status_code=502, detail="unexpected upstream payload")
+    if not data:
+        raise HTTPException(status_code=502, detail="upstream usage unavailable")
 
     return {
         "name": data.get("name"),

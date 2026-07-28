@@ -13,11 +13,13 @@ export type FilesListRow =
   | { kind: 'folder'; folder: FileFolder }
   | { kind: 'file'; file: PlatformFile }
 
-/** Map API origin to i18n key: platform → workspace, chat → chat. */
+/** Map API origin to i18n key. */
 export function fileOriginLabelKey(
   origin: string | undefined | null,
-): 'files.origin.workspace' | 'files.origin.chat' {
-  return origin === 'chat' ? 'files.origin.chat' : 'files.origin.workspace'
+): 'files.origin.workspace' | 'files.origin.chat' | 'files.origin.agent' {
+  if (origin === 'chat') return 'files.origin.chat'
+  if (origin === 'agent') return 'files.origin.agent'
+  return 'files.origin.workspace'
 }
 
 /** Only searchable (ready) documents can be cited into chat. */

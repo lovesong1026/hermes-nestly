@@ -5,6 +5,7 @@ import {
   isAdminRoute,
   isWorkspaceRoute,
   mainTabFromRoute,
+  parseAuthMode,
   parseResetToken,
   parseRoute,
   parseShareToken,
@@ -29,11 +30,21 @@ describe('routing', () => {
     expect(parseRoute('#/usage')).toBe('usage')
     expect(parseRoute('#/admin')).toBe('admin')
     expect(parseRoute('#/admin/audit')).toBe('admin-audit')
+    expect(parseRoute('#/admin/skills')).toBe('admin-skills')
+    expect(parseRoute('#/auth')).toBe('auth')
+    expect(parseRoute('#/auth?mode=register')).toBe('auth')
     expect(parseRoute('#/reset-password')).toBe('reset-password')
     expect(parseRoute('#/reset-password?token=abc')).toBe('reset-password')
     expect(parseRoute('#/chat')).toBe('chat')
     expect(parseRoute('#/share')).toBe('share')
     expect(parseRoute('#/share/tok_xyz')).toBe('share')
+  })
+
+  it('parses auth mode from hash query', () => {
+    expect(parseAuthMode('#/auth?mode=register')).toBe('register')
+    expect(parseAuthMode('#/auth?mode=login')).toBe('login')
+    expect(parseAuthMode('#/auth')).toBe('login')
+    expect(parseAuthMode('#/chat')).toBe(null)
   })
 
   it('parses reset token from hash query', () => {
@@ -55,8 +66,10 @@ describe('routing', () => {
 
   it('builds hrefs', () => {
     expect(routeHref('settings')).toBe('#/settings')
+    expect(routeHref('auth')).toBe('#/auth')
     expect(routeHref('file-tags')).toBe('#/file-tags')
     expect(routeHref('admin-audit')).toBe('#/admin/audit')
+    expect(routeHref('admin-skills')).toBe('#/admin/skills')
     expect(routeHref('share', 'tok_1')).toBe('#/share/tok_1')
   })
 
@@ -66,9 +79,11 @@ describe('routing', () => {
     expect(isWorkspaceRoute('chat')).toBe(false)
     expect(isAdminRoute('admin')).toBe(true)
     expect(isAdminRoute('admin-audit')).toBe(true)
+    expect(isAdminRoute('admin-skills')).toBe(true)
     expect(isAdminRoute('chat')).toBe(false)
     expect(mainTabFromRoute('skills')).toBe('workspace')
     expect(mainTabFromRoute('file-tags')).toBe('workspace')
+    expect(mainTabFromRoute('usage')).toBe('usage')
     expect(mainTabFromRoute('chat')).toBe('chat')
     expect(mainTabFromRoute('settings')).toBe('chat')
     expect(mainTabFromRoute('admin')).toBe('chat')

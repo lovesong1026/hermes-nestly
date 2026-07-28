@@ -1,5 +1,10 @@
 // Platform control-plane client (`/api/v1/*` on platform-api or nginx).
 
+import {
+  handleUnauthorizedRedirect,
+  isPlatformAuthExemptPath,
+} from './authRedirect'
+
 export type PlatformUser = {
   user_id: string
   email?: string
@@ -64,6 +69,10 @@ export type MemoryStats = {
   total: number
   pending: number
   last_updated_at?: string | null
+  limits?: {
+    memory: number
+    profile: number
+  }
 }
 
 export type KnowledgeBase = {
@@ -149,6 +158,53 @@ export type UsageLogItem = {
   cost: number
   metadata?: Record<string, unknown>
   created_at?: string | null
+}
+
+/** Third-party log.az-ai.icu Usage Center (bound upstream key). */
+export type UsageLogDays = 1 | 3 | 7 | 30 | 90
+
+export type UsageLogDailyPoint = {
+  date: string
+  requests: number
+  cost_usd: number
+  by_model: Record<string, number>
+}
+
+export type UsageLogModelRow = {
+  model: string
+  requests: number
+  cost_usd: number
+}
+
+export type UsageLogOverview = {
+  days: number
+  requests: number
+  cost_usd: number
+  balance_usd: number | null
+  balance_unlimited: boolean
+  prompt_tokens: number
+  completion_tokens: number
+  daily: UsageLogDailyPoint[]
+  by_model: UsageLogModelRow[]
+}
+
+export type UsageLogRow = {
+  id: number | string
+  created_at: string
+  model_name: string
+  prompt_tokens: number
+  completion_tokens: number
+  quota: number
+  cost_usd: number
+}
+
+export type UsageLogLogsPage = {
+  days: number
+  current_page: number
+  per_page: number
+  total: number
+  last_page: number
+  items: UsageLogRow[]
 }
 
 export type AuthResponse = {
@@ -288,9 +344,15 @@ function formatApiDetail(detail: unknown, fallback: string): string {
   }
 }
 
+type PlatformRequestOpts = {
+  /** Skip global 401 → `#/auth` (session probe / silent checks). */
+  skipUnauthorizedHandler?: boolean
+}
+
 async function platformRequest<T>(
   path: string,
   init: RequestInit = {},
+  opts: PlatformRequestOpts = {},
 ): Promise<T> {
   const isForm = typeof FormData !== 'undefined' && init.body instanceof FormData
   const res = await fetch(`${BASE}${path}`, {
@@ -307,6 +369,14 @@ async function platformRequest<T>(
       rawDetail = body.detail ?? body.error ?? res.statusText
     } catch {
       // ignore
+    }
+    if (
+      res.status === 401 &&
+      !opts.skipUnauthorizedHandler &&
+      !isPlatformAuthExemptPath(path)
+    ) {
+      clearWorkspaceId()
+      handleUnauthorizedRedirect()
     }
     throw new PlatformApiError(
       formatApiDetail(rawDetail, res.statusText),
@@ -381,6 +451,12 @@ export const platform = {
       body: JSON.stringify({ current_password, new_password }),
     }),
 
+  deactivate: (password: string, confirm: string) =>
+    platformRequest<{ status: string }>('/auth/deactivate', {
+      method: 'POST',
+      body: JSON.stringify({ password, confirm }),
+    }),
+
   forgotPassword: (email: string) =>
     platformRequest<{ status: string }>('/auth/forgot-password', {
       method: 'POST',
@@ -441,6 +517,21 @@ export const platform = {
     }>(`/usage/logs${q ? `?${q}` : ''}`)
   },
 
+  getUsageLogOverview: (days: UsageLogDays = 7) =>
+    platformRequest<UsageLogOverview>(`/usage-log/overview?days=${days}`),
+
+  getUsageLogLogs: (opts?: {
+    days?: UsageLogDays
+    page?: number
+    per_page?: number
+  }) => {
+    const params = new URLSearchParams()
+    params.set('days', String(opts?.days ?? 7))
+    if (opts?.page != null) params.set('page', String(opts.page))
+    if (opts?.per_page != null) params.set('per_page', String(opts.per_page))
+    return platformRequest<UsageLogLogsPage>(`/usage-log/logs?${params}`)
+  },
+
   listWorkspaces: () =>
     platformRequest<Workspace[]>('/workspaces'),
 
@@ -480,6 +571,12 @@ export const platform = {
 
   getMemoryStats: (workspaceId: string) =>
     platformRequest<MemoryStats>(`/workspaces/${workspaceId}/memory/stats`),
+
+  resetMemory: (workspaceId: string) =>
+    platformRequest<{ status: string; deleted: number }>(
+      `/workspaces/${workspaceId}/memory/reset`,
+      { method: 'POST' },
+    ),
 
   createMemoryItem: (
     workspaceId: string,
@@ -949,10 +1046,16 @@ export async function tryPlatformSession(): Promise<{
     return null
   }
   try {
-    const user = await platform.me()
+    const user = await platformRequest<PlatformUser>('/auth/me', {}, {
+      skipUnauthorizedHandler: true,
+    })
     let workspaceId = getStoredWorkspaceId()
     if (!workspaceId) {
-      const workspaces = await platform.listWorkspaces()
+      const workspaces = await platformRequest<Workspace[]>(
+        '/workspaces',
+        {},
+        { skipUnauthorizedHandler: true },
+      )
       if (workspaces[0]?.id) {
         workspaceId = workspaces[0].id
         storeWorkspaceId(workspaceId)

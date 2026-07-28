@@ -282,6 +282,27 @@ def create_knowledge_base(
         knowledge_id = kb.id
 
     # Process outside the create transaction so status updates are durable.
+    from platform_api.services.queue import enqueue_knowledge_index
+
+    result = enqueue_knowledge_index(
+        knowledge_id=knowledge_id,
+        user_id=user_id,
+        workspace_id=workspace_id,
+    )
+    if result.get("mode") == "sync" and isinstance(result.get("detail"), dict):
+        return result["detail"]
+    store = get_store()
+    with store._session_factory() as db:
+        return get_base_detail(
+            db,
+            knowledge_id=knowledge_id,
+            workspace_id=workspace_id,
+            user_id=user_id,
+        )
+
+
+def run_knowledge_index(*, knowledge_id: str, user_id: str) -> dict[str, Any]:
+    """Public entry for worker / sync fallback — indexes one knowledge base."""
     return _run_index(knowledge_id=knowledge_id, user_id=user_id)
 
 
@@ -339,7 +360,28 @@ def reindex_knowledge_base(
         kb = db.get(KnowledgeBase, knowledge_id)
         if not kb or kb.workspace_id != workspace_id or kb.user_id != user_id:
             raise LookupError("not found")
-    return _run_index(knowledge_id=knowledge_id, user_id=user_id)
+        kb.status = "processing"
+        kb.error_message = None
+        kb.updated_at = _utcnow()
+        db.add(kb)
+        db.commit()
+
+    from platform_api.services.queue import enqueue_knowledge_index
+
+    result = enqueue_knowledge_index(
+        knowledge_id=knowledge_id,
+        user_id=user_id,
+        workspace_id=workspace_id,
+    )
+    if result.get("mode") == "sync" and isinstance(result.get("detail"), dict):
+        return result["detail"]
+    with store._session_factory() as db:
+        return get_base_detail(
+            db,
+            knowledge_id=knowledge_id,
+            workspace_id=workspace_id,
+            user_id=user_id,
+        )
 
 
 def delete_knowledge_base(
@@ -441,4 +483,22 @@ def reindex_or_fail_after_file_removed(*, knowledge_id: str, user_id: str) -> No
                 delete(KnowledgeChunk).where(KnowledgeChunk.knowledge_id == knowledge_id)
             )
         return
-    _run_index(knowledge_id=knowledge_id, user_id=user_id)
+
+    from platform_api.services.queue import enqueue_knowledge_index
+
+    with store._session_factory() as db:
+        row = db.get(KnowledgeBase, knowledge_id)
+        if not row:
+            return
+        workspace_id = row.workspace_id
+        row.status = "processing"
+        row.error_message = None
+        row.updated_at = _utcnow()
+        db.add(row)
+        db.commit()
+
+    enqueue_knowledge_index(
+        knowledge_id=knowledge_id,
+        user_id=user_id,
+        workspace_id=workspace_id,
+    )

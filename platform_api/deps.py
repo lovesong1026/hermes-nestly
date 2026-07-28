@@ -40,7 +40,14 @@ def get_current_user_id(
         data = get_store().verify_web_session(hermes_session)
     except Exception:
         raise HTTPException(status_code=401, detail="unauthorized") from None
-    return data["user_id"]
+    user_id = str(data["user_id"])
+    try:
+        from platform_api.middleware_logging import set_request_user_id
+
+        set_request_user_id(user_id)
+    except Exception:
+        pass
+    return user_id
 
 
 def require_admin(

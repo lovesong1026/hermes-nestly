@@ -70,6 +70,7 @@ import {
   filterModelsByFavorites,
   PREFERENCES_UPDATED_EVENT,
 } from '../modelFavorites'
+import { resolveInitialModel } from '../modelStarter'
 import {
   conversationToMarkdown,
   downloadMarkdown,
@@ -225,12 +226,12 @@ export function ChatPage({
         setModels(catalog)
         setFavoriteModels(favorites)
         const picker = filterModelsByFavorites(catalog, favorites)
-        const pref =
-          res.preferred_model?.trim() ||
-          res.default_model?.trim() ||
-          picker[0]?.id ||
-          catalog[0]?.id ||
-          ''
+        const pref = resolveInitialModel({
+          preferred: res.preferred_model,
+          defaultModel: res.default_model,
+          catalogIds: catalog.map((m) => m.id),
+          pickerIds: picker.map((m) => m.id),
+        })
         setSelectedModel(pref)
       })
       .catch(() => undefined)
@@ -499,10 +500,12 @@ export function ChatPage({
             const s = saved[idx]
             return {
               ...p,
-              status: 'done',
+              status: 'done' as const,
               path: s.path,
               name: s.name,
               size: s.size,
+              fileId: s.fileId ?? p.fileId,
+              mimeType: s.mimeType ?? p.mimeType,
             }
           }),
         )
@@ -918,7 +921,12 @@ export function ChatPage({
 
   const onPreviewDoc = useCallback((item: PendingAttachment) => {
     if (!item.fileId) return
-    setPreviewFile({ fileId: item.fileId, name: item.name })
+    setPreviewFile({
+      fileId: item.fileId,
+      name: item.name,
+      mimeType: item.mimeType,
+      path: item.path,
+    })
     setPreviewOpen(true)
   }, [])
 
@@ -931,7 +939,15 @@ export function ChatPage({
       if (streaming || uploading) return
       const ready: UploadedFile[] = pending
         .filter((p) => p.status === 'done' && p.path)
-        .map((p) => ({ name: p.name, path: p.path as string, size: p.size }))
+        .map((p) => ({
+          name: p.name,
+          path: p.path as string,
+          size: p.size,
+          fileId: p.fileId,
+          mimeType: p.mimeType,
+          // Keep blob URL for hover preview on the sent turn.
+          previewUrl: p.previewUrl,
+        }))
       // Need either text or at least one uploaded attachment to send.
       if (!message && ready.length === 0) return
       // Slash commands never carry attachments.
@@ -941,8 +957,15 @@ export function ChatPage({
         return
       }
       setInput('')
+      const keepPreview = new Set(
+        ready.map((r) => r.previewUrl).filter((u): u is string => Boolean(u)),
+      )
       setPending((prev) => {
-        for (const p of prev) revokePreview(p.previewUrl)
+        for (const p of prev) {
+          if (p.previewUrl && !keepPreview.has(p.previewUrl)) {
+            revokePreview(p.previewUrl)
+          }
+        }
         return []
       })
       await runMessage(message, undefined, ready.length ? ready : undefined)
@@ -1201,6 +1224,19 @@ export function ChatPage({
                                     'reply',
                                     turnsToSharePayload([turn]),
                                   )
+                              : undefined
+                          }
+                          onPreviewAttachment={
+                            turn.role === 'user'
+                              ? (item) => {
+                                  setPreviewFile({
+                                    fileId: item.fileId,
+                                    name: item.name,
+                                    mimeType: item.mimeType,
+                                    path: item.path,
+                                  })
+                                  setPreviewOpen(true)
+                                }
                               : undefined
                           }
                         />

@@ -4,21 +4,29 @@ import { filterModelsByFavorites } from './modelFavorites'
 
 describe('filterModelsByFavorites', () => {
   const catalog = [
-    { id: 'a' },
-    { id: 'b' },
-    { id: 'c' },
+    { id: 'gpt-5.6-sol' },
+    { id: 'claude-opus-4.8' },
+    { id: 'gpt-5.6-luna' },
+    { id: 'claude-sonnet-4.6' },
   ]
 
-  it('returns full catalog when favorites empty', () => {
-    expect(filterModelsByFavorites(catalog, [])).toEqual(catalog)
-    expect(filterModelsByFavorites(catalog, null)).toEqual(catalog)
+  it('uses starter allowlist when favorites empty', () => {
+    expect(filterModelsByFavorites(catalog, []).map((m) => m.id)).toEqual([
+      'gpt-5.6-sol',
+      'claude-opus-4.8',
+      'claude-sonnet-4.6',
+    ])
+    expect(filterModelsByFavorites(catalog, null).map((m) => m.id)).toEqual([
+      'gpt-5.6-sol',
+      'claude-opus-4.8',
+      'claude-sonnet-4.6',
+    ])
   })
 
   it('keeps only favorite ids when present in catalog', () => {
-    expect(filterModelsByFavorites(catalog, ['c', 'a'])).toEqual([
-      { id: 'a' },
-      { id: 'c' },
-    ])
+    expect(
+      filterModelsByFavorites(catalog, ['claude-sonnet-4.6', 'gpt-5.6-sol']),
+    ).toEqual([{ id: 'gpt-5.6-sol' }, { id: 'claude-sonnet-4.6' }])
   })
 
   it('falls back to full catalog when no favorite matches', () => {
@@ -26,9 +34,10 @@ describe('filterModelsByFavorites', () => {
   })
 
   it('always includes the active model even if not favorited', () => {
-    expect(filterModelsByFavorites(catalog, ['a'], 'b')).toEqual([
-      { id: 'a' },
-      { id: 'b' },
-    ])
+    expect(
+      filterModelsByFavorites(catalog, ['gpt-5.6-sol'], 'gpt-5.6-luna').map(
+        (m) => m.id,
+      ),
+    ).toEqual(['gpt-5.6-sol', 'gpt-5.6-luna'])
   })
 })

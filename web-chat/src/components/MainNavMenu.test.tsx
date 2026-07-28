@@ -37,7 +37,7 @@ function renderMenu(props: Partial<ComponentProps<typeof MainNavMenu>> = {}) {
 }
 
 describe('MainNavMenu', () => {
-  it('tabs slot renders desktop chat/workspace tabs with center class', () => {
+  it('tabs slot renders desktop chat/workspace/usage tabs with center class', () => {
     renderMenu({ slot: 'tabs' })
     const tabs = screen.getByRole('tab', { name: /对话|Chat/i }).closest(
       '.app-nav-tabs',
@@ -47,15 +47,21 @@ describe('MainNavMenu', () => {
       screen.getByRole('tab', { name: /工作区|Workspace/i }),
     ).toBeInTheDocument()
     expect(
+      screen.getByRole('tab', { name: /用量中心|Usage Center/i }),
+    ).toBeInTheDocument()
+    expect(
       screen.queryByRole('button', { name: /主导航|Main menu/i }),
     ).toBeNull()
   })
 
-  it('hides workspace tab when not in platform mode', () => {
+  it('hides workspace and usage tabs when not in platform mode', () => {
     renderMenu({ slot: 'tabs', platformMode: false })
     expect(screen.getByRole('tab', { name: /对话|Chat/i })).toBeInTheDocument()
     expect(
       screen.queryByRole('tab', { name: /工作区|Workspace/i }),
+    ).toBeNull()
+    expect(
+      screen.queryByRole('tab', { name: /用量中心|Usage Center/i }),
     ).toBeNull()
   })
 
@@ -64,6 +70,13 @@ describe('MainNavMenu', () => {
     const { onMainTab } = renderMenu({ slot: 'tabs' })
     await user.click(screen.getByRole('tab', { name: /工作区|Workspace/i }))
     expect(onMainTab).toHaveBeenCalledWith('workspace')
+  })
+
+  it('desktop tab click switches to usage', async () => {
+    const user = userEvent.setup()
+    const { onMainTab } = renderMenu({ slot: 'tabs' })
+    await user.click(screen.getByRole('tab', { name: /用量中心|Usage Center/i }))
+    expect(onMainTab).toHaveBeenCalledWith('usage')
   })
 
   it('menu slot renders hamburger for mobile (left of avatar)', () => {
@@ -89,5 +102,15 @@ describe('MainNavMenu', () => {
     await user.click(screen.getByRole('button', { name: /主导航|Main menu/i }))
     await user.click(screen.getByRole('menuitem', { name: /工作区|Workspace/i }))
     expect(onMainTab).toHaveBeenCalledWith('workspace')
+  })
+
+  it('mobile menu can open usage', async () => {
+    const user = userEvent.setup()
+    const { onMainTab } = renderMenu({ slot: 'menu' })
+    await user.click(screen.getByRole('button', { name: /主导航|Main menu/i }))
+    await user.click(
+      screen.getByRole('menuitem', { name: /用量中心|Usage Center/i }),
+    )
+    expect(onMainTab).toHaveBeenCalledWith('usage')
   })
 })

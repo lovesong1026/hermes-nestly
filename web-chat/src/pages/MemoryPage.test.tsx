@@ -23,6 +23,7 @@ vi.mock('../platformClient', async (importOriginal) => {
       deleteMemoryItem: vi.fn(),
       approveMemoryItem: vi.fn(),
       rejectMemoryItem: vi.fn(),
+      resetMemory: vi.fn(),
     },
   }
 })
@@ -64,6 +65,11 @@ describe('Memory Center', () => {
       total: 1,
       pending: 1,
       last_updated_at: '2026-06-30T12:00:00Z',
+      limits: { memory: 2200, profile: 1375 },
+    })
+    vi.mocked(platform.resetMemory).mockResolvedValue({
+      status: 'ok',
+      deleted: 2,
     })
     vi.mocked(platform.listMemoryItems).mockImplementation(
       async (_wid, params) => {
@@ -144,6 +150,53 @@ describe('Memory Center', () => {
         'ws-1',
         expect.objectContaining({ q: 'risk' }),
       )
+    })
+  })
+
+  it('shows character count in edit dialog', async () => {
+    const user = userEvent.setup()
+    render(
+      <LocaleProvider>
+        <MemoryPage />
+      </LocaleProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Senior engineer')).toBeInTheDocument()
+    })
+    // Default tab is profile → USER.md limit 1375
+    await user.click(screen.getByRole('button', { name: /^add memory$/i }))
+    await waitFor(() => {
+      expect(screen.getByTestId('memory-char-count')).toHaveTextContent(
+        /0 \/ 1375/,
+      )
+    })
+  })
+
+  it('confirms reset all and calls API', async () => {
+    const user = userEvent.setup()
+    const successSpy = vi.spyOn(toast, 'success')
+    render(
+      <LocaleProvider>
+        <MemoryPage />
+      </LocaleProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Senior engineer')).toBeInTheDocument()
+    })
+    await user.click(screen.getByRole('button', { name: /^reset all$/i }))
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Clear all memories in this workspace/i),
+      ).toBeInTheDocument()
+    })
+    // Confirm dialog has another Reset all button
+    const buttons = screen.getAllByRole('button', { name: /^reset all$/i })
+    await user.click(buttons[buttons.length - 1]!)
+    await waitFor(() => {
+      expect(platform.resetMemory).toHaveBeenCalledWith('ws-1')
+      expect(successSpy).toHaveBeenCalledWith('All memories cleared.')
     })
   })
 })

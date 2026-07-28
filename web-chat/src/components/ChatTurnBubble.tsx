@@ -24,6 +24,7 @@ export function ChatTurnBubble({
   onRetry,
   onEdit,
   onShare,
+  onPreviewAttachment,
   userAvatarUrl,
 }: {
   turn: Turn
@@ -31,6 +32,13 @@ export function ChatTurnBubble({
   onEdit?: () => void
   /** Assistant: open confirm → create immutable share link. */
   onShare?: () => void
+  /** User turn: open FilePreviewDrawer for image / md / pdf attachments. */
+  onPreviewAttachment?: (item: {
+    name: string
+    fileId: string
+    mimeType?: string
+    path?: string
+  }) => void
   /** Custom profile image; only shown on user turns when set. */
   userAvatarUrl?: string | null
 }) {
@@ -145,7 +153,11 @@ export function ChatTurnBubble({
         })}
 
         {turn.attachments && turn.attachments.length > 0 && (
-          <AttachmentList items={turn.attachments} />
+          <AttachmentList
+            items={turn.attachments}
+            align={isUser ? 'end' : 'start'}
+            onPreviewDoc={isUser ? onPreviewAttachment : undefined}
+          />
         )}
         {turn.status === 'streaming' && turn.segments.length === 0 && (
           <Bubble variant={variant} align={align}>

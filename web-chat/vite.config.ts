@@ -25,14 +25,8 @@ export default defineConfig({
     outDir: path.resolve(projectRoot, '../gateway/web/_static'),
     emptyOutDir: true,
     sourcemap: true,
-    // Single bundle keeps the SPA shell minimal — code-splitting
-    // doesn't pay off for a ~5-route app and adds latency on cold
-    // visits (extra HTTP requests under WSL/local dev).
-    rollupOptions: {
-      output: {
-        manualChunks: undefined,
-      },
-    },
+    // Usage Center (+ Chart.js) is lazy-loaded from App so the chat shell
+    // stays smaller; other routes remain in the main chunk for now.
   },
   server: {
     host: true, // 0.0.0.0 — LAN devices can open http://<lan-ip>:5173

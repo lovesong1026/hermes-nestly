@@ -57,7 +57,7 @@ export function toggleExpanded(
 
 /**
  * Class names for the content column.
- * Default → `.content-column` (960px / 98%, centered).
+ * Default → `.content-column` (max 960px / 100% width, centered).
  * Full → `.content-column--full` (bleed into chat / workspace area).
  */
 export function widthClass(width: LayoutWidth | 'lg'): string {

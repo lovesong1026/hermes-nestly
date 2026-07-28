@@ -38,6 +38,17 @@ def _platform_store():
     return store
 
 
+def _target_to_category(target: str) -> Optional[str]:
+    """Map tool ``target`` to Memory Center category."""
+    mapping = {
+        "user": "profile",
+        "preference": "preference",
+        "project": "project",
+        "memory": "knowledge",
+    }
+    return mapping.get(target)
+
+
 def web_memory(
     action: str,
     target: str = "memory",
@@ -54,10 +65,13 @@ def web_memory(
             "error": "internal sandbox not initialised",
         })
 
-    if target not in {"memory", "user"}:
+    category = _target_to_category(target)
+    if category is None:
         return json.dumps({
             "success": False,
-            "error": "Invalid target. Use 'memory' or 'user'.",
+            "error": (
+                "Invalid target. Use 'user', 'preference', 'project', or 'memory'."
+            ),
         })
 
     store = _platform_store()
@@ -75,8 +89,6 @@ def web_memory(
     ws = store.get_default_workspace(user_id) or store.ensure_default_workspace(user_id)
     if not ws:
         return json.dumps({"success": False, "error": "no workspace for user"})
-
-    category = "profile" if target == "user" else "knowledge"
 
     try:
         with session_scope(store._engine) as db:
@@ -177,7 +189,8 @@ _WEB_MEMORY_SCHEMA: Dict[str, Any] = {
         "long-term memory / the system prompt. Do NOT assume a save is permanent.\n\n"
         "WHEN TO PROPOSE: user corrections, stable preferences, role/identity, "
         "project conventions that will matter later.\n\n"
-        "TARGETS: 'user' (profile) or 'memory' (notes/knowledge).\n"
+        "TARGETS: 'user' (profile), 'preference', 'project', or 'memory' "
+        "(general knowledge notes).\n"
         "ACTIONS: add (new pending suggestion), replace/remove (only pending "
         "items matched by old_text). Active memories are user-controlled."
     ),
@@ -191,8 +204,11 @@ _WEB_MEMORY_SCHEMA: Dict[str, Any] = {
             },
             "target": {
                 "type": "string",
-                "enum": ["memory", "user"],
-                "description": "'user' for profile, 'memory' for notes.",
+                "enum": ["memory", "user", "preference", "project"],
+                "description": (
+                    "'user' for profile, 'preference' for lasting prefs, "
+                    "'project' for project context, 'memory' for general notes."
+                ),
             },
             "content": {
                 "type": "string",

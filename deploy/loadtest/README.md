@@ -84,7 +84,34 @@ k6 run \
 
 1. `GET /api/v1/healthz` 返回 `status: "ok"`，且 `checks.database/redis/object_store` 符合部署形态。
 2. 压测期间 SQLite/磁盘无明显尖刺；若 `REDIS_URL` / MinIO 已启用，确认 worker 与对象存储无连接风暴。
-3. 本基线 **不能** 代替 50 并发正式压测（含聊天 SSE）；见 `TODOLIST.md` Phase 6.3。
+3. 本基线 **不能** 代替 50 并发正式压测（含聊天 SSE）；见下方「50 VU + SSE」。
+
+## 50 VU + SSE（FakeRunner）
+
+`k6-chat-sse.js` 默认 **50 VU × 2m**，对 `POST /api/chat` 读流至 `event: done`。**禁止真 LLM**：Gateway 启动时设置：
+
+```bash
+export HERMES_WEB_CHAT_FAKE_RUNNER=1
+./startplatform.sh --host 127.0.0.1
+```
+
+```bash
+k6 run \
+  -e BASE_URL=http://127.0.0.1:8700 \
+  -e GATEWAY_URL=http://127.0.0.1:8643 \
+  -e EMAIL=sse50@example.com \
+  -e PASSWORD='loadtest-password-123' \
+  -e UPSTREAM_KEY='sk-loadtest-fake-key' \
+  deploy/loadtest/k6-chat-sse.js
+```
+
+| 指标 | Threshold |
+|------|-----------|
+| `chat_sse_ok` | rate > 95% |
+| `chat_sse_ttfb_ms` | p95 < 3s |
+| `chat_sse_done_ms` | p95 < 8s |
+
+报告：将 k6 终端输出或 `--out json=report-sse50.json` 归档到运维证据目录。
 
 ## 健康检查样例
 

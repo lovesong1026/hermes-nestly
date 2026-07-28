@@ -83,6 +83,17 @@ export function KnowledgePage() {
     void reload()
   }, [reload])
 
+  // Poll while any knowledge base is still indexing.
+  useEffect(() => {
+    if (!workspaceId) return
+    const needsPoll = items.some((row) => row.status === 'processing')
+    if (!needsPoll) return
+    const timer = window.setInterval(() => {
+      void reload()
+    }, 2000)
+    return () => window.clearInterval(timer)
+  }, [workspaceId, items, reload])
+
   useEffect(() => {
     if (tab === 'create') void loadFiles()
   }, [tab, loadFiles])
@@ -269,16 +280,20 @@ export function KnowledgePage() {
                 key={row.id}
                 className={cn('memory-item', 'knowledge-item')}
               >
-                <div className="memory-item-main">
-                  <div className="memory-item-title-row">
-                    <strong>{row.name}</strong>
-                    {statusBadge(row.status)}
-                    <Badge variant="outline">{row.category}</Badge>
+                <div className="knowledge-item-body">
+                  <div className="memory-item-title-row knowledge-item-title-row">
+                    <strong className="knowledge-item-name">{row.name}</strong>
+                    <div className="knowledge-item-badges">
+                      {statusBadge(row.status)}
+                      <Badge variant="outline">{row.category}</Badge>
+                    </div>
                   </div>
                   {row.description ? (
-                    <p className="page-hint">{row.description}</p>
+                    <p className="page-hint knowledge-item-desc">
+                      {row.description}
+                    </p>
                   ) : null}
-                  <p className="page-hint">
+                  <p className="page-hint knowledge-item-meta">
                     {t('knowledge.meta.files', { n: row.file_count })} ·{' '}
                     {t('knowledge.meta.chunks', { n: row.chunk_count })} ·{' '}
                     {formatWhen(row.updated_at)}
@@ -289,7 +304,7 @@ export function KnowledgePage() {
                     </p>
                   ) : null}
                 </div>
-                <div className="memory-item-actions">
+                <div className="memory-item-actions knowledge-item-actions">
                   <Button
                     type="button"
                     variant="outline"

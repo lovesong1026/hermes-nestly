@@ -1,6 +1,11 @@
 // API client for the web_chat gateway adapter.
 import { parseSseFrame } from './sse'
 import type { ChatEvent, ChatMessage } from './chatEvents'
+import {
+  handleUnauthorizedRedirect,
+  isGatewayAuthExemptPath,
+  shouldRedirectGatewayUnauthorized,
+} from './authRedirect'
 export type { ChatEvent, ChatMessage } from './chatEvents'
 
 export type User = {
@@ -28,6 +33,11 @@ export type UploadedFile = {
   name: string
   path: string
   size: number
+  /** Platform FileRecord id when registered (chat upload / library cite). */
+  fileId?: string
+  mimeType?: string
+  /** Blob / content URL kept for image hover preview on the sent turn. */
+  previewUrl?: string
 }
 
 // ── Stored messages (returned by GET /api/conversations/:id) ────────────
@@ -115,6 +125,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     } catch {
       // Non-JSON error response — keep the empty body.
     }
+    if (
+      res.status === 401 &&
+      shouldRedirectGatewayUnauthorized() &&
+      !isGatewayAuthExemptPath(path)
+    ) {
+      handleUnauthorizedRedirect()
+    }
     throw new ApiError(body.error ?? res.statusText, res.status, body.code)
   }
   if (res.status === 204) return undefined as T
@@ -173,10 +190,21 @@ export const uploads = {
   create: (files: File[]) => {
     const fd = new FormData()
     for (const f of files) fd.append('files', f, f.name)
-    return request<{ files: UploadedFile[] }>(`/api/uploads`, {
+    return request<{
+      files: Array<UploadedFile & { file_id?: string }>
+    }>(`/api/uploads`, {
       method: 'POST',
       body: fd,
-    }).then((r) => r.files)
+    }).then((r) =>
+      r.files.map((f) => ({
+        name: f.name,
+        path: f.path,
+        size: f.size,
+        fileId: f.fileId ?? f.file_id,
+        mimeType: f.mimeType,
+        previewUrl: f.previewUrl,
+      })),
+    )
   },
 }
 
@@ -242,11 +270,18 @@ export async function* streamChat(
     } catch {
       // ignore
     }
-    // Surface 401 with a distinct code so the UI can open the key modal.
+    // Surface 401 with a distinct code so the UI can open the key modal
+    // (legacy) or redirect to `#/auth` (platform mode).
     const code =
       body.code ??
       (res.status === 401 ? 'unauthorized' : undefined) ??
       undefined
+    if (
+      res.status === 401 &&
+      shouldRedirectGatewayUnauthorized()
+    ) {
+      handleUnauthorizedRedirect()
+    }
     yield {
       type: 'error',
       message: body.error ?? `HTTP ${res.status}`,

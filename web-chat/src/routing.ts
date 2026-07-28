@@ -11,11 +11,13 @@ export type Route =
   | 'usage'
   | 'admin'
   | 'admin-audit'
+  | 'admin-skills'
+  | 'auth'
   | 'reset-password'
   | 'share'
 
 /** Top-level chrome tabs (settings lives in AccountMenu). */
-export type MainTab = 'chat' | 'workspace'
+export type MainTab = 'chat' | 'workspace' | 'usage'
 
 export type WorkspaceTab = 'files' | 'knowledge' | 'memory' | 'skills'
 
@@ -27,8 +29,10 @@ const ROUTES: Route[] = [
   'memory',
   'skills',
   'usage',
+  'admin-skills',
   'admin-audit',
   'admin',
+  'auth',
   'reset-password',
   'share',
   'chat',
@@ -47,11 +51,23 @@ function hashPath(hash: string): string {
 /** Parse ``#/chat``-style hash into a canonical route name. */
 export function parseRoute(hash: string): Route {
   const path = hashPath(hash)
-  // Nested admin audit uses slash form in the URL (`#/admin/audit`).
+  // Nested admin routes use slash form (`#/admin/audit`, `#/admin/skills`).
   if (path === 'admin/audit') return 'admin-audit'
+  if (path === 'admin/skills') return 'admin-skills'
   // Public share: `#/share/<token>`
   if (path === 'share' || path.startsWith('share/')) return 'share'
   return ROUTES.find((r) => path === r) ?? 'chat'
+}
+
+/** Read ``mode`` from ``#/auth?mode=register|login`` (default login). */
+export function parseAuthMode(hash: string): 'login' | 'register' | null {
+  const raw = hash.replace(/^#\/?/, '')
+  const path = raw.split('?')[0] ?? ''
+  if (path !== 'auth') return null
+  const q = raw.includes('?') ? raw.slice(raw.indexOf('?') + 1) : ''
+  const mode = new URLSearchParams(q).get('mode')?.trim().toLowerCase()
+  if (mode === 'register') return 'register'
+  return 'login'
 }
 
 /** Read ``token`` from ``#/reset-password?token=…``. */
@@ -74,13 +90,14 @@ export function parseShareToken(hash: string): string | null {
 
 export function routeHref(route: Route, shareToken?: string): string {
   if (route === 'admin-audit') return '#/admin/audit'
+  if (route === 'admin-skills') return '#/admin/skills'
   if (route === 'share' && shareToken) return `#/share/${shareToken}`
   return `#/${route}`
 }
 
 /** Admin console routes (users list + audit log). */
 export function isAdminRoute(route: Route): boolean {
-  return route === 'admin' || route === 'admin-audit'
+  return route === 'admin' || route === 'admin-audit' || route === 'admin-skills'
 }
 
 export function isWorkspaceRoute(route: Route): boolean {
@@ -104,6 +121,7 @@ export function workspaceShellTab(route: Route): WorkspaceTab | null {
 
 /** Map any route to the visible primary tab (settings → background). */
 export function mainTabFromRoute(route: Route): MainTab {
+  if (route === 'usage') return 'usage'
   return isWorkspaceRoute(route) ? 'workspace' : 'chat'
 }
 

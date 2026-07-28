@@ -18,6 +18,9 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 export type PreviewableFile = {
   fileId: string
   name: string
+  /** Helps detect images with opaque / extensionless names. */
+  mimeType?: string | null
+  path?: string | null
 }
 
 type Props = {
@@ -45,7 +48,12 @@ export function FilePreviewDrawer({
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  const kind = file ? workspacePreviewKind(file.name) : null
+  const kind = file
+    ? workspacePreviewKind(file.name, {
+        mimeType: file.mimeType,
+        path: file.path,
+      })
+    : null
 
   const contentSrc =
     workspaceId && file?.fileId

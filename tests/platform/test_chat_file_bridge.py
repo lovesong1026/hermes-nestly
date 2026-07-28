@@ -42,6 +42,9 @@ async def test_chat_upload_registers_file_record_skipped(gateway, client, mock_u
     assert rec.origin == "chat"
     assert rec.status == "skipped"
 
+    body = await mp.json()
+    assert body["files"][0].get("file_id") == rec.id
+
     # Cross-user isolation: second user sees nothing
     data2, cookie2 = register_user(client, email="other@example.com")
     with store._session_factory() as db:

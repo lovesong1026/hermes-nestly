@@ -29,6 +29,8 @@ describe('platformClient workspace storage', () => {
 describe('platform API', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+    window.location.hash = ''
+    localStorage.clear()
   })
 
   it('register posts to /api/v1/auth/register', async () => {
@@ -56,6 +58,34 @@ describe('platform API', () => {
     await expect(platform.login('a@b.com', 'wrong')).rejects.toBeInstanceOf(
       PlatformApiError,
     )
+  })
+
+  it('redirects to #/auth on 401 for protected paths', async () => {
+    window.location.hash = '#/files'
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({ detail: 'unauthorized' }, { status: 401 }),
+      ),
+    )
+
+    await expect(platform.me()).rejects.toBeInstanceOf(PlatformApiError)
+    expect(window.location.hash).toBe('#/auth')
+  })
+
+  it('does not redirect on login 401', async () => {
+    window.location.hash = '#/auth'
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({ detail: 'bad credentials' }, { status: 401 }),
+      ),
+    )
+
+    await expect(platform.login('a@b.com', 'wrong')).rejects.toBeInstanceOf(
+      PlatformApiError,
+    )
+    expect(window.location.hash).toBe('#/auth')
   })
 
   it('createShare posts snapshot and getShare reads by token', async () => {
