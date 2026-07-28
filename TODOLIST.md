@@ -406,6 +406,7 @@ flowchart TD
 - [x] skill 全工具埋点：list / view / install / edit / patch / delete
 - [x] UI：`#/usage` + Settings / AccountMenu 入口；与 `/billing/*` 并存
 - [x] 测试：`tests/platform/test_usage_center.py`
+- [x] SPA 主展示改为第三方 log 代理：`GET /usage-log/overview|logs`（绑定 sk；本地账本保留）
 - [ ] 硬配额拦截（后续）
 
 ### 4.5 Agent 启动时 Skill Hint 注入

@@ -160,6 +160,53 @@ export type UsageLogItem = {
   created_at?: string | null
 }
 
+/** Third-party log.az-ai.icu Usage Center (bound upstream key). */
+export type UsageLogDays = 1 | 3 | 7 | 30 | 90
+
+export type UsageLogDailyPoint = {
+  date: string
+  requests: number
+  cost_usd: number
+  by_model: Record<string, number>
+}
+
+export type UsageLogModelRow = {
+  model: string
+  requests: number
+  cost_usd: number
+}
+
+export type UsageLogOverview = {
+  days: number
+  requests: number
+  cost_usd: number
+  balance_usd: number | null
+  balance_unlimited: boolean
+  prompt_tokens: number
+  completion_tokens: number
+  daily: UsageLogDailyPoint[]
+  by_model: UsageLogModelRow[]
+}
+
+export type UsageLogRow = {
+  id: number | string
+  created_at: string
+  model_name: string
+  prompt_tokens: number
+  completion_tokens: number
+  quota: number
+  cost_usd: number
+}
+
+export type UsageLogLogsPage = {
+  days: number
+  current_page: number
+  per_page: number
+  total: number
+  last_page: number
+  items: UsageLogRow[]
+}
+
 export type AuthResponse = {
   user: PlatformUser
   workspace?: Workspace
@@ -468,6 +515,21 @@ export const platform = {
       offset: number
       items: UsageLogItem[]
     }>(`/usage/logs${q ? `?${q}` : ''}`)
+  },
+
+  getUsageLogOverview: (days: UsageLogDays = 7) =>
+    platformRequest<UsageLogOverview>(`/usage-log/overview?days=${days}`),
+
+  getUsageLogLogs: (opts?: {
+    days?: UsageLogDays
+    page?: number
+    per_page?: number
+  }) => {
+    const params = new URLSearchParams()
+    params.set('days', String(opts?.days ?? 7))
+    if (opts?.page != null) params.set('page', String(opts.page))
+    if (opts?.per_page != null) params.set('per_page', String(opts.per_page))
+    return platformRequest<UsageLogLogsPage>(`/usage-log/logs?${params}`)
   },
 
   listWorkspaces: () =>

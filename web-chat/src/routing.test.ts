@@ -83,6 +83,7 @@ describe('routing', () => {
     expect(isAdminRoute('chat')).toBe(false)
     expect(mainTabFromRoute('skills')).toBe('workspace')
     expect(mainTabFromRoute('file-tags')).toBe('workspace')
+    expect(mainTabFromRoute('usage')).toBe('usage')
     expect(mainTabFromRoute('chat')).toBe('chat')
     expect(mainTabFromRoute('settings')).toBe('chat')
     expect(mainTabFromRoute('admin')).toBe('chat')

@@ -568,7 +568,7 @@ export function SettingsPage({
                               <Pencil className="size-3" aria-hidden />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start" className="min-w-[10rem]">
+                          <DropdownMenuContent align="start" className="min-w-40">
                             <DropdownMenuItem
                               onSelect={(e) => {
                                 e.preventDefault()
@@ -720,7 +720,7 @@ export function SettingsPage({
                   </p>
                   <div className="space-y-2">
                     <Label htmlFor="settings-deactivate-pw">
-                      {t('settings.password.current')}
+                      {t('settings.deactivate.password')}
                     </Label>
                     <Input
                       id="settings-deactivate-pw"

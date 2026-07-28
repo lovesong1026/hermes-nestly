@@ -21,6 +21,7 @@ from platform_api.routers import (
     shares,
     skills,
     usage,
+    usage_log,
     workspaces,
 )
 
@@ -40,6 +41,7 @@ app.include_router(health.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(billing.router, prefix="/api/v1")
 app.include_router(usage.router, prefix="/api/v1")
+app.include_router(usage_log.router, prefix="/api/v1")
 app.include_router(workspaces.router, prefix="/api/v1")
 app.include_router(files.router, prefix="/api/v1")
 app.include_router(knowledge.router, prefix="/api/v1")

@@ -17,7 +17,7 @@ export type Route =
   | 'share'
 
 /** Top-level chrome tabs (settings lives in AccountMenu). */
-export type MainTab = 'chat' | 'workspace'
+export type MainTab = 'chat' | 'workspace' | 'usage'
 
 export type WorkspaceTab = 'files' | 'knowledge' | 'memory' | 'skills'
 
@@ -121,6 +121,7 @@ export function workspaceShellTab(route: Route): WorkspaceTab | null {
 
 /** Map any route to the visible primary tab (settings → background). */
 export function mainTabFromRoute(route: Route): MainTab {
+  if (route === 'usage') return 'usage'
   return isWorkspaceRoute(route) ? 'workspace' : 'chat'
 }
 

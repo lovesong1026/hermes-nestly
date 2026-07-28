@@ -1,4 +1,10 @@
-import { Check, LayoutGrid, Menu, MessageSquare } from 'lucide-react'
+import {
+  BarChart3,
+  Check,
+  LayoutGrid,
+  Menu,
+  MessageSquare,
+} from 'lucide-react'
 import { useT } from '../i18n'
 import type { MainTab } from '../routing'
 import { Button } from '@/components/ui/button'
@@ -22,6 +28,7 @@ type Props = {
 
 /**
  * Desktop: centered pill Tabs. Mobile: hamburger to the left of the avatar.
+ * Order: Chat | Workspace | Usage (platform only for the latter two).
  */
 export function MainNavMenu({
   activeTab,
@@ -48,6 +55,12 @@ export function MainNavMenu({
               <TabsTrigger value="workspace" className="gap-1.5">
                 <LayoutGrid className="size-4" aria-hidden />
                 {t('nav.workspace')}
+              </TabsTrigger>
+            )}
+            {platformMode && (
+              <TabsTrigger value="usage" className="gap-1.5">
+                <BarChart3 className="size-4" aria-hidden />
+                {t('nav.usage')}
               </TabsTrigger>
             )}
           </TabsList>
@@ -90,6 +103,18 @@ export function MainNavMenu({
               <LayoutGrid className="size-4" aria-hidden />
               <span className="flex-1">{t('nav.workspace')}</span>
               {activeTab === 'workspace' ? (
+                <Check className="size-4 opacity-70" aria-hidden />
+              ) : null}
+            </DropdownMenuItem>
+          )}
+          {platformMode && (
+            <DropdownMenuItem
+              className="gap-2"
+              onSelect={() => onMainTab('usage')}
+            >
+              <BarChart3 className="size-4" aria-hidden />
+              <span className="flex-1">{t('nav.usage')}</span>
+              {activeTab === 'usage' ? (
                 <Check className="size-4 opacity-70" aria-hidden />
               ) : null}
             </DropdownMenuItem>

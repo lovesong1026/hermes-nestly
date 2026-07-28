@@ -307,11 +307,11 @@ code {
 }
 
 /**
- * Centered content column: max 960px; 98% of the available area when narrower.
+ * Centered content column: max 960px; full width when viewport is narrower.
  * Use CSS (not Tailwind) so flex stretch cannot pin the column to the left.
  */
 .content-column {
-  width: min(960px, 98%);
+  width: 100%;
   max-width: 960px;
   margin-inline: auto;
   align-self: center;

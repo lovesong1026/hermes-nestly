@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { Toaster } from '@/components/ui/sonner'
 import { ChatPage } from './pages/ChatPage'
 import { SettingsPage } from './pages/SettingsPage'
@@ -8,7 +8,6 @@ import { FileTagsPage } from './pages/FileTagsPage'
 import { KnowledgePage } from './pages/KnowledgePage'
 import { MemoryPage } from './pages/MemoryPage'
 import { SkillsPage } from './pages/SkillsPage'
-import { UsagePage } from './pages/UsagePage'
 import { AdminPage } from './pages/AdminPage'
 import { AdminAuditPage } from './pages/AdminAuditPage'
 import { AdminSkillsPage } from './pages/AdminSkillsPage'
@@ -50,7 +49,28 @@ import {
   resetOnboarding,
 } from './onboardingStorage'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+
+/** Chart.js 较重：仅进入用量中心时加载，避免拖大主包。 */
+const UsagePage = lazy(() =>
+  import('./pages/UsagePage').then((m) => ({ default: m.UsagePage })),
+)
+
+function UsagePageFallback() {
+  return (
+    <div className="content-column space-y-4 p-4" aria-busy="true">
+      <Skeleton className="h-8 w-48" />
+      <Skeleton className="h-4 w-72" />
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-5">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Skeleton key={i} className="h-20 w-full" />
+        ))}
+      </div>
+      <Skeleton className="h-64 w-full" />
+    </div>
+  )
+}
 
 function goto(route: Route) {
   window.location.hash = routeHref(route)
@@ -194,6 +214,10 @@ function AppShell() {
       goto('chat')
       return
     }
+    if (tab === 'usage') {
+      goto('usage')
+      return
+    }
     if (!isWorkspaceRoute(pageRoute)) {
       goto(workspaceEntryRoute())
     }
@@ -239,7 +263,7 @@ function AppShell() {
             </button>
           </div>
 
-          {/* PC：对话/工作区居中；移动端：汉堡在头像左侧（CSS 显隐） */}
+          {/* PC：对话 | 工作区 | 用量中心 居中；移动端：汉堡在头像左侧（CSS 显隐） */}
           <MainNavMenu
             slot="tabs"
             activeTab={activeTab}
@@ -268,9 +292,6 @@ function AppShell() {
               email={user.email}
               avatarUrl={user.avatar_url}
               onOpenSettings={() => goto('settings')}
-              onOpenUsage={
-                platformMode ? () => goto('usage') : undefined
-              }
               onLogout={() => void handleLoggedOut()}
             />
           </div>
@@ -336,7 +357,9 @@ function AppShell() {
                 </WorkspaceShell>
               )}
               {pageRoute === 'usage' && platformMode && (
-                <UsagePage key={`usage-${pageKey}`} />
+                <Suspense fallback={<UsagePageFallback />}>
+                  <UsagePage key={`usage-${pageKey}`} />
+                </Suspense>
               )}
               {pageRoute === 'admin' && <AdminPage key={`admin-${pageKey}`} />}
               {pageRoute === 'admin-audit' && (
