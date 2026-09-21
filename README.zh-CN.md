@@ -10,7 +10,12 @@
 
 # Hermes 多用户 Web 服务
 
-基于 [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) 的自托管多用户 AI Agent 平台。项目在上游 Hermes Agent 之外增加了：
+<p align="center">
+  <a href="https://github.com/SeerBench/hermes-multiuser-web-service/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License: MIT"></a>
+  <a href="https://github.com/NousResearch/hermes-agent"><img src="https://img.shields.io/badge/Upstream-Hermes%20Agent-blueviolet?style=for-the-badge" alt="Upstream: Hermes Agent"></a>
+  <a href="README.md"><img src="https://img.shields.io/badge/Lang-English-lightgrey?style=for-the-badge" alt="English"></a>
+  <a href="README.ur-pk.md"><img src="https://img.shields.io/badge/Lang-اردو-green?style=for-the-badge" alt="اردو"></a>
+</p>
 
 - FastAPI Platform API：邮箱注册、登录、工作区、文件/RAG、Memory、Skill、模型偏好、用量和 Admin。
 - Agent Gateway：Cookie 鉴权、SSE 流式对话、会话管理、附件上传和每用户 Agent 上下文。
@@ -74,57 +79,55 @@ Browser SPA
 ### 1. 安装
 
 ```bash
-git clone https://github.com/SeerBench/hermes-multiuser-web-service.git
-cd hermes-multiuser-web-service
-
-./setup-hermes.sh
-source .venv/bin/activate
-uv pip install -e ".[web-chat,platform]"
-
-cd web-chat
-npm install
-npm run build
-cd ..
+curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
 ```
 
-### 2. 配置上游 LLM 网关
+支持 Linux、macOS、WSL2 和 Android (Termux)。安装程序会自动处理平台特定的配置。
+
+> **Android / Termux：** 已测试的手动安装路径请参考 [Termux 指南](https://hermes-agent.nousresearch.com/docs/getting-started/termux)。在 Termux 上，Hermes 会安装精选的 `.[termux]` 扩展，因为完整的 `.[all]` 扩展会拉取 Android 不兼容的语音依赖。
+>
+> **Windows：** 在 PowerShell 中运行：
+> ```powershell
+> iex (irm https://hermes-agent.nousresearch.com/install.ps1)
+> ```
+> 安装完成后，可能需要重启终端，然后运行 `hermes` 开始对话。
+
+安装后：
 
 在 `$HERMES_HOME/.env`（默认 `~/.hermes/.env`）中配置：
 
 ```bash
 NEW_API_BASE_URL=https://your-new-api.example.com
 
-# 自动开户时配置；不配置则使用 manual 模式，让用户注册后绑定 key
-NEW_API_ADMIN_TOKEN=replace-me
-UPSTREAM_PROVISIONER=auto
-```
+---
 
-Gateway 首次启动会在 `$HERMES_HOME/web_users_master.key` 自动生成 Fernet 主密钥。
-生产环境必须将该 `0600` 文件与数据库一同安全备份。
+## HTTP 接口
 
-### 3. 启动 Platform SaaS
+唯一的鉴权方式是 `hermes_session` Cookie,由 `/api/auth/login` 签发。
+
+| 方法 | 路径 | 鉴权 | 用途 |
+|---|---|---|---|
+| `POST` | `/api/auth/login` | 无 | 用 new-api key 向上游验证,通过则签 Cookie |
+| `POST` | `/api/auth/logout` | Cookie | 失效 Cookie + 删除服务端 session 行 |
+| `GET`  | `/api/me` | 有 | 当前 `user_id` + 首次/最近登录时间 |
+| `GET`  | `/api/conversations` | 有 | 列出该用户的 session(按 `user_id` 过滤) |
+| `POST` | `/api/chat` | 有 | **SSE 流式** agent 响应 |
+| `GET`  | `/api/healthz` | 无 | 健康探针 |
+| `GET`  | `/static/*`, `/assets/*` | 无 | SPA 静态资源 |
+| `GET`  | `/` | 无 | SPA shell |
+
+- **300+ 模型** — 用 `/model <name>` 随时切换
+- **Tool Gateway** — 网页搜索（Firecrawl）、图像生成（FAL）、文本转语音（OpenAI）、云浏览器（Browser Use），全部通过订阅托管。无需额外注册任何账户。
+
+全新安装时一条命令即可：
 
 ```bash
-# SQLite 控制面，默认仅监听 localhost
-./startplatform.sh --host 127.0.0.1
-
-# 使用 deploy/docker-compose.yml 中的 PostgreSQL
-./startplatform.sh --postgres --host 127.0.0.1
+hermes setup --portal
 ```
 
-打开 <http://127.0.0.1:8643/>。Platform API 默认监听 `:8700`，Gateway/SPA
-监听 `:8643`。
+它会通过 OAuth 登录、把 Nous 设为推理服务商，并启用 Tool Gateway。随时用 `hermes portal info` 查看路由状态。完整说明见 [Tool Gateway 文档](https://hermes-agent.nousresearch.com/docs/user-guide/features/tool-gateway)。
 
-首次创建管理员：
-
-```bash
-source .venv/bin/activate
-python scripts/create_admin.py \
-  --email admin@example.com \
-  --password 'replace-with-a-strong-password'
-```
-
-仅需要原有 API key 登录模式时，可运行：
+你随时可以按工具单独切回自己的 API Key — Gateway 是按工具粒度生效的，不是一刀切。
 
 ```bash
 ./startweb.sh --host 127.0.0.1
@@ -232,24 +235,69 @@ npm run verify
 
 ## 上游兼容策略
 
-本项目坚持“业务能力放在 sidecar/fork 路径，上游核心保持可合并”：
+上游 Agent 及绝大多数代码：[Nous Research / Hermes Agent](https://github.com/NousResearch/hermes-agent)，MIT 许可。本分叉在其之上加了多用户 Web 服务层，并继承 MIT 许可。
 
-- 多用户代码位于 `gateway/web/`、`gateway/platforms/web_chat.py`、
-  `platform_api/` 和 `web-chat/`。
-- 沙箱工具包装上游公共函数，不复制 `tools/file_operations.py` 等实现。
-- `run_agent.py`、`hermes_state.py`、`gateway/run.py` 等仅保留少量具名、向后兼容的
-  user_id 传播和平台注册补丁。
-- Memory 隔离通过 `HERMES_HOME` ContextVar 完成，不修改
-  `agent/memory_manager.py`。
+**首次安装时：** 安装向导（`hermes setup`）会自动检测 `~/.openclaw` 并在配置开始前提供迁移选项。
 
-同步上游：
+**安装后任意时间：**
 
 ```bash
-git fetch upstream
-git rebase upstream/main
+hermes claw migrate              # 交互式迁移（完整预设）
+hermes claw migrate --dry-run    # 预览将要迁移的内容
+hermes claw migrate --preset user-data   # 仅迁移用户数据，不含密钥
+hermes claw migrate --overwrite  # 覆盖已有冲突
 ```
 
-具体边界和 rebase 注意事项见 [`CLAUDE.md`](CLAUDE.md)。
+导入内容：
+- **SOUL.md** — 人格文件
+- **记忆** — MEMORY.md 和 USER.md 条目
+- **技能** — 用户创建的技能 → `~/.hermes/skills/openclaw-imports/`
+- **命令白名单** — 审批模式
+- **消息设置** — 平台配置、允许用户、工作目录
+- **API 密钥** — 白名单中的密钥（Telegram、OpenRouter、OpenAI、Anthropic、ElevenLabs）
+- **TTS 资产** — 工作区音频文件
+- **工作区指令** — AGENTS.md（使用 `--workspace-target`）
+
+使用 `hermes claw migrate --help` 查看所有选项，或使用 `openclaw-migration` 技能进行交互式代理引导迁移（含干运行预览）。
+
+---
+
+## 贡献
+
+欢迎贡献！请参阅 [贡献指南](https://hermes-agent.nousresearch.com/docs/developer-guide/contributing) 了解开发设置、代码风格和 PR 流程。
+
+贡献者快速开始——使用标准安装器，然后在它创建的完整 git checkout 中开发：
+`$HERMES_HOME/hermes-agent`（通常是 `~/.hermes/hermes-agent`）。这会匹配
+`hermes update`、托管 venv、lazy dependencies、gateway 和 docs tooling 使用的布局。
+
+```bash
+curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+cd "${HERMES_HOME:-$HOME/.hermes}/hermes-agent"
+uv pip install -e ".[all,dev]"
+scripts/run_tests.sh
+```
+
+手动克隆备用路径（用于一次性 clone / CI，或你明确不想使用 managed install layout 时）：
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv venv venv --python 3.11
+source venv/bin/activate
+uv pip install -e ".[all,dev]"
+python -m pytest tests/ -q
+```
+
+---
+
+## 社区
+
+- 💬 [Discord](https://discord.gg/NousResearch)
+- 📚 [技能中心](https://agentskills.io)
+- 🐛 [问题反馈](https://github.com/NousResearch/hermes-agent/issues)
+- 💡 [讨论区](https://github.com/NousResearch/hermes-agent/discussions)
+- 🔌 [HermesClaw](https://github.com/AaronWong1999/hermesclaw) — 社区微信桥接：在同一微信账号上运行 Hermes Agent 和 OpenClaw。
+
+---
 
 ## 尚未完成
 

@@ -153,6 +153,11 @@ def _resolve_web_chat_enabled_toolsets(user_config: dict) -> list[str]:
     from tools.registry import registry
 
     enabled = set(_get_platform_tools(user_config, "web_chat"))
+    # An explicit platform allowlist wins.  This is useful to deployments
+    # that deliberately enable just one sandbox toolset, and avoids silently
+    # widening a caller-supplied list during tests or custom integrations.
+    if any(name in enabled for name in _FORK_WEB_CHAT_SANDBOX_TOOLSETS):
+        return sorted(enabled)
     composite_tools = set(resolve_toolset("hermes-web-chat"))
 
     for ts_name in _FORK_WEB_CHAT_SANDBOX_TOOLSETS:

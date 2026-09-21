@@ -66,6 +66,14 @@ _CLIENT_ONLY: tuple[Dict[str, str], ...] = (
      "args_hint": ""},
 )
 
+# Hermes renamed ``/background`` to ``/bg`` upstream.  Keep the former in
+# the web catalog as an unsupported compatibility item so older SPA builds
+# get a clear 405 response instead of treating it as an unknown command.
+_LEGACY_UNSUPPORTED: tuple[Dict[str, str], ...] = (
+    {"name": "background", "category": "Session",
+     "description": "Run a prompt in a separate background session"},
+)
+
 
 # ── Result type ────────────────────────────────────────────────────────────
 
@@ -128,6 +136,15 @@ def list_commands() -> List[Dict[str, Any]]:
             "supported": cmd.name in _SERVER_SUPPORTED,
         })
 
+    for entry in _LEGACY_UNSUPPORTED:
+        if entry["name"] not in seen:
+            out.append({
+                "name": entry["name"], "description": entry["description"],
+                "description_i18n": {"en": entry["description"], "zh": entry["description"]},
+                "category": entry["category"], "args_hint": "", "aliases": [], "subcommands": [],
+                "client_only": False, "supported": False,
+            })
+
     return out
 
 
@@ -154,6 +171,11 @@ def dispatch(
     raw = (name or "").strip().lstrip("/").lower()
     if not raw:
         return CommandResult(ok=False, message="command name required", status=400)
+
+    if raw == "background":
+        return CommandResult(
+            ok=False, message="/background is not yet available in web chat", status=405,
+        )
 
     # Client-only commands shouldn't reach the server, but if the SPA
     # ever fat-fingers a request, tell it cleanly.

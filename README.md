@@ -8,31 +8,31 @@
   <a href="https://github.com/QuantumNous/new-api"><img src="https://img.shields.io/badge/Upstream-new--api-2496ED?style=for-the-badge" alt="Upstream: new-api"></a>
 </p>
 
-# Hermes Multi-User Web Service
-
-**A self-hosted, multi-tenant chat UI built on top of [Nous Research's Hermes Agent](https://github.com/NousResearch/hermes-agent), with authentication and billing delegated to an upstream OpenAI-compatible gateway like [new-api](https://github.com/QuantumNous/new-api).** End-users paste the API key their administrator issued from the upstream gateway; the browser cookie that comes back carries that key encrypted at rest, and every LLM call is billed to the key's account upstream. One Python process serves any number of users with isolated conversations, memory, and filesystem workspaces.
+# Hermes Agent ☤
+<p align="center">
+  <a href="https://hermes-agent.nousresearch.com/">Hermes Agent</a> | <a href="https://hermes-agent.nousresearch.com/">Hermes Desktop</a>
+</p>
+<p align="center">
+  <a href="https://github.com/SeerBench/hermes-multiuser-web-service/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License: MIT"></a>
+  <a href="https://github.com/NousResearch/hermes-agent"><img src="https://img.shields.io/badge/Upstream-Hermes%20Agent-blueviolet?style=for-the-badge" alt="Upstream: Hermes Agent"></a>
+  <a href="README.zh-CN.md"><img src="https://img.shields.io/badge/Lang-中文-red?style=for-the-badge" alt="中文"></a>
+  <a href="README.ur-pk.md"><img src="https://img.shields.io/badge/Lang-اردو-green?style=for-the-badge" alt="اردو"></a>
+  <a href="README.es.md"><img src="https://img.shields.io/badge/Lang-Español-orange?style=for-the-badge" alt="Español"></a>
+</p>
 
 This is a **fork** of upstream Hermes, not a re-implementation. The agent loop, skill system, memory provider stack, model-provider plugins, and 25+ gateway adapters all come directly from upstream — untouched. What we add is one new platform adapter (`web_chat`), the per-user isolation primitives that go with it, and the thin glue layer that talks to a new-api-compatible upstream — all packaged so `git pull upstream main` stays merge-conflict-free in perpetuity.
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│  Browser SPA  ──cookie (hermes_session)──▶  gateway:8643         │
-│                                                  │               │
-│                       ┌──────────────────────────┘               │
-│                       ▼                                          │
-│   auth: cookie → user_id + decrypted upstream key                │
-│   binding: enter_user_context(user_id), enter_upstream_key(key)  │
-│                       │                                          │
-│                       ▼                                          │
-│   AIAgent (upstream Hermes) inside loop.run_in_executor          │
-│         │                                                        │
-│         ├─ tools: web_search, memory, todo, skills, web_file_*   │
-│         │                                                        │
-│         ▼                                                        │
-│   new-api gateway ──Bearer (user's key)──▶ OpenAI / Anthropic /  │
-│   (handles billing, rate limits, key management)   any LLM       │
-└──────────────────────────────────────────────────────────────────┘
-```
+Use any model you want — [Nous Portal](https://portal.nousresearch.com), OpenRouter, OpenAI, your own endpoint, and [many others](https://hermes-agent.nousresearch.com/docs/integrations/providers). Switch with `hermes model` — no code changes, no lock-in.
+
+<table>
+<tr><td><b>A real terminal interface</b></td><td>Full TUI with multiline editing, slash-command autocomplete, conversation history, interrupt-and-redirect, and streaming tool output.</td></tr>
+<tr><td><b>Lives where you do</b></td><td>Telegram, Discord, Slack, WhatsApp, Signal, and CLI — all from a single gateway process. Voice memo transcription, cross-platform conversation continuity.</td></tr>
+<tr><td><b>A closed learning loop</b></td><td>Agent-curated memory with periodic nudges. Autonomous skill creation after complex tasks. Skills self-improve during use. FTS5 session search with LLM summarization for cross-session recall. <a href="https://github.com/plastic-labs/honcho">Honcho</a> dialectic user modeling. Compatible with the <a href="https://agentskills.io">agentskills.io</a> open standard.</td></tr>
+<tr><td><b>Scheduled automations</b></td><td>Built-in cron scheduler with delivery to any platform. Daily reports, nightly backups, weekly audits — all in natural language, running unattended.</td></tr>
+<tr><td><b>Delegates and parallelizes</b></td><td>Spawn isolated subagents for parallel workstreams. Write Python scripts that call tools via RPC, collapsing multi-step pipelines into zero-context-cost turns.</td></tr>
+<tr><td><b>Runs anywhere, not just your laptop</b></td><td>Seven terminal backends — local, Docker, SSH, Singularity, Modal, Daytona, and Vercel Sandbox. Daytona and Modal offer serverless persistence — your agent's environment hibernates when idle and wakes on demand, costing nearly nothing between sessions. Run it on a $5 VPS or a GPU cluster.</td></tr>
+<tr><td><b>Research-ready</b></td><td>Batch trajectory generation, trajectory compression for training the next generation of tool-calling models.</td></tr>
+</table>
 
 `new-api` is the example we test against, but any OpenAI-compatible billing gateway that speaks `GET /v1/models` for key validation and `POST /v1/chat/completions` for inference works — One API, Helicone, LiteLLM proxy, your own internal gateway, etc.
 
@@ -85,53 +85,120 @@ The user_id that anchors workspaces is **derived** from `sha256(api_key)[:12]` �
 
 ---
 
-## Upstream compatibility — the core design decision
+## Why this fork exists
 
-This is the single most important thing about the project. We hold to a strict rule:
+Upstream Hermes Agent is a brilliant single-user CLI and single-tenant gateway. It does **not** ship a multi-user web product because that was never the upstream's goal. But the agent core — tools, skills, memory, model routing, sandboxed terminal backends — is exactly what you want for a self-hosted "ChatGPT-but-with-real-tools" service for a small team, a family, a community, or a research group. So this fork adds:
 
-> **Pay code duplication and verbosity if it means upstream files don't get touched.**
-
-The forks that die are the ones that quietly rewrite half of upstream and then can't merge anything for six months. We refuse to be one of those. Concretely:
-
-| Strategy | Where we use it | Why it works |
-|---|---|---|
-| **Sub-package isolation** | All multi-tenant code lives under `gateway/web/` (new directory), `gateway/platforms/web_chat.py` (new file), and `web-chat/` (new directory). | These paths don't exist upstream, so `git pull` never touches them. Conflict probability: 0. |
-| **Mirror, not refactor** | `WebChatAgentRunner` (`gateway/web/chat_runner.py`) is a ~150-LOC parallel to `gateway/platforms/api_server.py`'s `_create_agent` / `_run_agent`. We don't refactor api_server.py to share code with us. | api_server.py is the most-edited gateway file upstream. Any shared module would be a permanent merge-conflict source. The duplication is paid once. |
-| **Wrap, not fork** | `web_file_read` / `web_file_write` / `web_file_patch` / `web_file_search` call the upstream `read_file_tool` / `write_file_tool` / etc. via their public function signatures, prefixed by a `confine_path` check. We don't fork `tools/file_operations.py` (~2k LOC) or `tools/file_tools.py`. | Upstream is free to refactor tool internals. Only the public function names matter to us, and those have been stable for many releases. |
-| **Surgical bug-fixes** in upstream files | A handful of small B-class edits: `run_agent.py:517` and `agent/conversation_compression.py:391` (1 line each — propagate `user_id` to SessionDB writes); `gateway/run.py` (one `elif Platform.WEB_CHAT` branch in `_create_adapter` + one `NEW_API_BASE_URL` override block in `_resolve_runtime_agent_kwargs`); `hermes_state.py` query-method `user_id` parameter additions; `hermes_cli/config.py` `OPTIONAL_ENV_VARS` entry for `NEW_API_BASE_URL`; and three fork-gated blocks in `tools/web_tools.py` registering the bundled `http-fetch` extract backend. All are pure bug fixes or additive/inert-upstream branches; default behavior unchanged. | The user_id propagation is a real multi-tenant bug — slated to be offered back upstream as a PR. The NEW_API_BASE_URL and http-fetch hooks are small operational additions. Conflict points resolve in seconds. |
-| **Opt-in extra** | `cryptography` (KeyVault) and `ddgs` (keyless `web_search`) are in the `[web-chat]` extra, not core. Installs without the extra fail loudly at adapter startup with a clear pip hint. | Doesn't bloat the upstream base install for users who never run the web service. |
-
-**Files we deliberately did not touch**, even when it would have been simpler:
-
-```
-gateway/platforms/api_server.py    0 lines changed
-tools/file_operations.py           0 lines changed
-tools/file_tools.py                0 lines changed
-tools/terminal_tool.py             0 lines changed
-agent/memory_manager.py            0 lines changed
-cli.py                             0 lines changed
-hermes_cli/main.py                 0 lines changed
+```bash
+curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
 ```
 
-Memory isolation is achieved without touching `memory_manager.py` by overriding `HERMES_HOME` via a ContextVar — every memory provider already reads `get_hermes_home()`, so the override propagates everywhere automatically. The per-request upstream-key injection uses the same ContextVar trick for `api_key`.
+### Windows (native, PowerShell)
 
-Maintenance loop: `git fetch upstream && git rebase upstream/main`. Conflicts, when they happen, are confined to the few named patches.
+> **Heads up:** Native Windows runs Hermes without WSL — CLI, gateway, TUI, and tools all work natively. If you'd rather use WSL2, the Linux/macOS one-liner above works there too. Found a bug? Please [file issues](https://github.com/NousResearch/hermes-agent/issues).
+
+Run this in PowerShell:
+
+```powershell
+iex (irm https://hermes-agent.nousresearch.com/install.ps1)
+```
+
+The installer handles everything: uv, Python 3.11, Node.js, ripgrep, ffmpeg, **and a portable Git Bash** (MinGit, unpacked to `%LOCALAPPDATA%\hermes\git` — no admin required, completely isolated from any system Git install). Hermes uses this bundled Git Bash to run shell commands.
+
+If you already have Git installed, the installer detects it and uses that instead. Otherwise a ~45MB MinGit download is all you need — it won't touch or interfere with any system Git.
+
+> **Android / Termux:** The tested manual path is documented in the [Termux guide](https://hermes-agent.nousresearch.com/docs/getting-started/termux). On Termux, Hermes installs a curated `.[termux]` extra because the full `.[all]` extra currently pulls Android-incompatible voice dependencies.
+>
+> **Windows:** Native Windows is fully supported — the PowerShell one-liner above installs everything. If you'd rather use WSL2, the Linux command works there too. Native Windows install lives under `%LOCALAPPDATA%\hermes`; WSL2 installs under `~/.hermes` as on Linux.
+
+After installation:
+
+```bash
+source ~/.bashrc    # reload shell (or: source ~/.zshrc)
+hermes              # start chatting!
+```
+
+### Troubleshooting
+
+#### Windows Defender or antivirus flags `uv.exe` as malware
+
+If your antivirus (Bitdefender, Windows Defender, etc.) quarantines `uv.exe` from the Hermes `bin` folder (`%LOCALAPPDATA%\hermes\bin\uv.exe`), this is a **false positive**. The file is Astral's `uv` — the Rust Python package manager Hermes bundles to manage its Python environment. ML-based antivirus engines commonly flag unsigned Rust binaries that download and install packages.
+
+**To verify your copy is authentic:**
+
+```powershell
+# Install GitHub CLI if needed
+winget install --id GitHub.cli
+
+# Login to GitHub
+gh auth login
+
+# Run verification
+$uv = "$env:LOCALAPPDATA\hermes\bin\uv.exe"
+$ver = (& $uv --version).Split(' ')[1]
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$zip = "$env:TEMP\uv.zip"
+Invoke-WebRequest "https://github.com/astral-sh/uv/releases/download/$ver/uv-x86_64-pc-windows-msvc.zip" -OutFile $zip -UseBasicParsing
+gh attestation verify $zip --repo astral-sh/uv
+Expand-Archive $zip "$env:TEMP\uv_x" -Force
+(Get-FileHash "$env:TEMP\uv_x\uv.exe").Hash -eq (Get-FileHash $uv).Hash
+```
+
+If attestation says "Verification succeeded" and the last line prints `True`, you're good.
+
+**To whitelist Hermes:**
+- **Windows Defender:** Run PowerShell as Admin → `Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\hermes\bin"`
+- **Bitdefender:** Add an exception in the Bitdefender console (Protection > Antivirus > Settings > Manage Exceptions)
+- Whitelist the **folder**, not the file hash — Hermes updates `uv` and the hash changes every version
+
+For more context, see the upstream Astral reports: [astral-sh/uv#13553](https://github.com/astral-sh/uv/issues/13553), [astral-sh/uv#15011](https://github.com/astral-sh/uv/issues/15011), [astral-sh/uv#10079](https://github.com/astral-sh/uv/issues/10079).
 
 ---
 
 ## Is this fork for you?
 
-| Use case | Fit |
-|---|---|
-| **Self-host a chat UI for a small team / community / family**, with new-api (or similar) handling identity and billing | ✅ Core use case — this *is* the project |
-| **Already running new-api / One API / LiteLLM** and want a richer chat front-end than the bundled one (real tools, memory, skills) | ✅ Drop-in — point `NEW_API_BASE_URL` at your gateway, paste users' existing keys |
-| **Replace OpenAI / Claude / etc. as "personal AI for N people"** where each person has their own usage budget | ✅ Designed for this — new-api meters per-key, this UI surfaces that to a browser |
-| **Run an internal tool inside a company** behind a reverse proxy with SSO at the proxy layer | ✅ Combine with TLS + SSO upstream; the cookie just gates the chat surface |
-| **Lab / study group / classroom** with per-user history, memory, and (via new-api) usage caps | ✅ The isolation layer is real; let new-api enforce caps |
-| **A SaaS product with paid plans** | ⚠️ new-api already handles billing, but you'll still add the marketing / Stripe-checkout / signup-flow front-end yourself |
-| **Single-person CLI / local development tool** | ❌ Use upstream Hermes directly. `hermes` and `hermes dashboard` give you that without the multi-tenant overhead |
-| **OpenAI-compatible API for external apps** (Open WebUI, LibreChat, OpenAI SDKs) | ❌ Point them at your new-api gateway directly. Or use upstream Hermes's `api_server` platform for non-OpenAI surface area |
-| **Untrusted users running arbitrary terminal commands** | ❌ Wrong tool — see "Security model". The web sandbox defends against accidental path traversal, not kernel exploits |
+```bash
+hermes              # Interactive CLI — start a conversation
+hermes model        # Choose your LLM provider and model
+hermes tools        # Configure which tools are enabled
+hermes config set   # Set individual config values
+hermes config get   # Print individual config values
+hermes gateway      # Start the messaging gateway (Telegram, Discord, etc.)
+hermes setup        # Run the full setup wizard (configures everything at once)
+hermes claw migrate # Migrate from OpenClaw (if coming from OpenClaw)
+hermes update       # Update to the latest version
+hermes doctor       # Diagnose any issues
+```
+
+- **Sub-package isolation.** All multi-user code lives under `gateway/web/`. Importing the package does not touch the rest of Hermes; nothing outside is rewired.
+- **Mirror, don't modify.** `chat_runner.py` is a parallel implementation of `api_server.py`'s agent factory, not a refactor of it. ~150 LOC of duplication in exchange for zero merge conflicts against the most-edited file in upstream.
+- **Wrap, don't fork.** Sandboxed file tools import and call `tools/file_tools.py` functions as-is and only add a `confine_path()` guard. Upstream changes to file tools land for free.
+- **Toolset, not core, registration.** New tools (`web_file_*`) are added to a dedicated `hermes-web-chat` toolset in `toolsets.py` — the only edit outside the sub-package.
+- **Optional dependency, opt-in extra.** `argon2-cffi` is behind the `[web-chat]` extra; nothing forces this dep on users who never run the web service.
+- **No edits to load-bearing files.** `run_agent.py`, `cli.py`, `gateway/run.py`, `hermes_cli/main.py` are untouched. The `CLAUDE.md` ground rule that plugins must not modify core is honored here even though this is a fork, not a plugin.
+
+The only changes outside `gateway/web/` are: (1) one toolset entry in `toolsets.py`, (2) a `user_id` column threaded through `SessionDB` writes (commit `2ce65f980`), (3) `web_chat` registered in the gateway platform enum. Each is a small, well-contained patch designed to be re-applied by hand or via `git rerere` if upstream rewrites the file.
+
+In practice, `git fetch upstream && git rebase upstream/main` is the maintenance loop.
+
+---
+
+## When to use this fork
+
+Hermes works with whatever provider you want — that's not changing. But if you'd rather not collect five separate API keys for the model, web search, image generation, TTS, and a cloud browser, **[Nous Portal](https://portal.nousresearch.com)** covers all of them under one subscription:
+
+- **300+ models** — pick any of them with `/model <name>`
+- **Tool Gateway** — web search (Firecrawl), image generation (FAL), text-to-speech (OpenAI), cloud browser (Browser Use), all routed through your sub. No extra accounts.
+
+One command from a fresh install:
+
+```bash
+hermes setup --portal
+```
+
+That logs you in via OAuth, sets Nous as your provider, and turns on the Tool Gateway. Check what's wired up any time with `hermes portal info`. Full details on the [Tool Gateway docs page](https://hermes-agent.nousresearch.com/docs/user-guide/features/tool-gateway).
+
+You can still bring your own keys per-tool whenever you want — the gateway is per-backend, not all-or-nothing.
 
 ---
 
@@ -139,12 +206,17 @@ Maintenance loop: `git fetch upstream && git rebase upstream/main`. Conflicts, w
 
 Numbers assume the upstream LLM is **cloud-hosted** (routed through new-api → OpenAI / Anthropic / Nous Portal / OpenRouter / your own provider). The bottleneck shifts depending on box size:
 
-| Tier | RAM | CPU | Concurrent active agents | SPA users online | First bottleneck |
-|---|---|---|---|---|---|
-| **2c / 4 GB** | 4 GB | 2 vCPU | 10–15 | 80–150 | new-api rate limits or upstream LLM |
-| **4c / 8 GB** ⭐ | 8 GB | 4 vCPU | 25–40 | 200–300 | new-api / LLM + SQLite > 5 RPS |
-| **8c / 16 GB** | 16 GB | 8 vCPU | 60–100 | 500–1000 | SQLite — migrate to Postgres |
-| Larger | — | — | — | — | not a single-box deployment — Postgres + Redis + multi-worker |
+| Action                         | CLI                                           | Messaging platforms                                                              |
+| ------------------------------ | --------------------------------------------- | -------------------------------------------------------------------------------- |
+| Start chatting                 | `hermes`                                      | Run `hermes gateway setup` + `hermes gateway start`, then send the bot a message |
+| Start fresh conversation       | `/new` or `/reset`                            | `/new` or `/reset`                                                               |
+| Change model                   | `/model [provider:model]`                     | `/model [provider:model]`                                                        |
+| Set a personality              | `/personality [name]`                         | `/personality [name]`                                                            |
+| Retry or undo the last turn    | `/retry`, `/undo`                             | `/retry`, `/undo`                                                                |
+| Compress context / check usage | `/compress`, `/usage`, `/insights [--days N]` | `/compress`, `/usage`, `/insights [days]`                                        |
+| Browse skills                  | `/skills` or `/<skill-name>`                  | `/<skill-name>`                                                                  |
+| Interrupt current work         | `Ctrl+C` or send a new message                | `/stop` or send a new message                                                    |
+| Platform-specific status       | `/platforms`                                  | `/status`, `/sethome`                                                            |
 
 Disk: ~2 GB for the venv + code, then per-user data grows with use.
 
@@ -158,40 +230,89 @@ Practical observations:
 
 ---
 
-## Quick start
+## Documentation
+
+All documentation lives at **[hermes-agent.nousresearch.com/docs](https://hermes-agent.nousresearch.com/docs/)**:
+
+| Section                                                                                             | What's Covered                                             |
+| --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| [Quickstart](https://hermes-agent.nousresearch.com/docs/getting-started/quickstart)                 | Install → setup → first conversation in 2 minutes          |
+| [CLI Usage](https://hermes-agent.nousresearch.com/docs/user-guide/cli)                              | Commands, keybindings, personalities, sessions             |
+| [Configuration](https://hermes-agent.nousresearch.com/docs/user-guide/configuration)                | Config file, providers, models, all options                |
+| [Messaging Gateway](https://hermes-agent.nousresearch.com/docs/user-guide/messaging)                | Telegram, Discord, Slack, WhatsApp, Signal, Home Assistant |
+| [Security](https://hermes-agent.nousresearch.com/docs/user-guide/security)                          | Command approval, DM pairing, container isolation          |
+| [Tools & Toolsets](https://hermes-agent.nousresearch.com/docs/user-guide/features/tools)            | 40+ tools, toolset system, terminal backends               |
+| [Skills System](https://hermes-agent.nousresearch.com/docs/user-guide/features/skills)              | Procedural memory, Skills Hub, creating skills             |
+| [Memory](https://hermes-agent.nousresearch.com/docs/user-guide/features/memory)                     | Persistent memory, user profiles, best practices           |
+| [MCP Integration](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp)               | Connect any MCP server for extended capabilities           |
+| [Cron Scheduling](https://hermes-agent.nousresearch.com/docs/user-guide/features/cron)              | Scheduled tasks with platform delivery                     |
+| [Context Files](https://hermes-agent.nousresearch.com/docs/user-guide/features/context-files)       | Project context that shapes every conversation             |
+| [Architecture](https://hermes-agent.nousresearch.com/docs/developer-guide/architecture)             | Project structure, agent loop, key classes                 |
+| [Contributing](https://hermes-agent.nousresearch.com/docs/developer-guide/contributing)             | Development setup, PR process, code style                  |
+| [CLI Reference](https://hermes-agent.nousresearch.com/docs/reference/cli-commands)                  | All commands and flags                                     |
+| [Environment Variables](https://hermes-agent.nousresearch.com/docs/reference/environment-variables) | Complete env var reference                                 |
+
+---
+
+## Migrating from OpenClaw
+
+If you're coming from OpenClaw, Hermes can automatically import your settings, memories, skills, and API keys.
+
+**During first-time setup:** The setup wizard (`hermes setup`) automatically detects `~/.openclaw` and offers to migrate before configuration begins.
+
+**Anytime after install:**
 
 ```bash
-# 1. Clone + base install
-git clone https://github.com/SeerBench/hermes-multiuser-web-service.git
-cd hermes-multiuser-web-service
-./setup-hermes.sh                                 # uv venv + .[all,dev]
-source .venv/bin/activate
-uv pip install -e ".[web-chat]"                   # cryptography (KeyVault) + ddgs (keyless web_search)
+hermes claw migrate              # Interactive migration (full preset)
+hermes claw migrate --dry-run    # Preview what would be migrated
+hermes claw migrate --preset user-data   # Migrate without secrets
+hermes claw migrate --overwrite  # Overwrite existing conflicts
+```
 
-# 2. Point at your new-api (or other OpenAI-compatible gateway)
-echo "NEW_API_BASE_URL=https://your-new-api.example.com" >> ~/.hermes/.env
+What gets imported:
 
-# 3. Enable the platform — add to ~/.hermes/config.yaml:
-cat >> ~/.hermes/config.yaml <<'YAML'
-platforms:
-  web_chat:
-    enabled: true
-    extra:
-      host: 127.0.0.1
-      port: 8643
-      max_concurrent_agents: 12
-      cookie_secure: false             # set true in production (HTTPS)
-      cookie_ttl_seconds: 604800       # 7 days
-YAML
+- **SOUL.md** — persona file
+- **Memories** — MEMORY.md and USER.md entries
+- **Skills** — user-created skills → `~/.hermes/skills/openclaw-imports/`
+- **Command allowlist** — approval patterns
+- **Messaging settings** — platform configs, allowed users, working directory
+- **API keys** — allowlisted secrets (Telegram, OpenRouter, OpenAI, Anthropic, ElevenLabs)
+- **TTS assets** — workspace audio files
+- **Workspace instructions** — AGENTS.md (with `--workspace-target`)
 
-# 4. Build the SPA (one-time, ~50 MB node_modules)
-cd web-chat && npm install && npm run build && cd ..
+See `hermes claw migrate --help` for all options, or use the `openclaw-migration` skill for an interactive agent-guided migration with dry-run previews.
 
-# 5. In your new-api admin panel: create users, mint API keys,
-#    hand each key to its intended end-user out-of-band (email, Slack, etc.)
+---
 
-# 6. Run
-hermes gateway run
+## Contributing
+
+We welcome contributions! See the [Contributing Guide](https://hermes-agent.nousresearch.com/docs/developer-guide/contributing) for development setup, code style, and PR process.
+
+Quick start for contributors — use the standard installer, then work from the
+full git checkout it creates at `$HERMES_HOME/hermes-agent` (usually
+`~/.hermes/hermes-agent`). This matches the layout used by `hermes update`, the
+managed venv, lazy dependencies, gateway, and docs tooling.
+
+```bash
+curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+cd "${HERMES_HOME:-$HOME/.hermes}/hermes-agent"
+uv pip install -e ".[all,dev]"
+scripts/run_tests.sh
+```
+
+Manual clone fallback (for throwaway clones/CI where you intentionally do not
+want the managed install layout):
+
+Create the venv outside the cloned source tree — a venv inside the directory
+the agent operates from can be wiped by a relative-path command the agent runs
+against its own checkout, destroying the running runtime mid-session.
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv venv ~/.hermes/venvs/hermes-dev --python 3.11
+source ~/.hermes/venvs/hermes-dev/bin/activate
+uv pip install -e ".[all,dev]"
+scripts/run_tests.sh
 ```
 
 > **Windows note:** the upstream single-user agent installs natively on Windows via `powershell -ExecutionPolicy Bypass -File scripts/install.ps1`. The multi-user web service itself targets Linux/macOS servers — on Windows, run it under WSL2.

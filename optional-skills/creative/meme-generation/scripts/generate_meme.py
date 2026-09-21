@@ -5,8 +5,8 @@ Usage:
     python generate_meme.py <template_id_or_name> <output_path> <text1> [text2] [text3] [text4]
 
 Example:
-    python generate_meme.py drake /tmp/meme.png "Writing tests" "Shipping to prod and hoping"
-    python generate_meme.py "Disaster Girl" /tmp/meme.png "Top text" "Bottom text"
+    python generate_meme.py drake ~/.hermes/cache/scratch/meme.png "Writing tests" "Shipping to prod and hoping"
+    python generate_meme.py "Disaster Girl" ~/.hermes/cache/scratch/meme.png "Top text" "Bottom text"
     python generate_meme.py --list                    # show curated templates
     python generate_meme.py --search "distracted"     # search all imgflip templates
 
@@ -18,7 +18,6 @@ unknown templates get smart default text positioning based on their box_count.
 import json
 import os
 import sys
-import textwrap
 from io import BytesIO
 from pathlib import Path
 

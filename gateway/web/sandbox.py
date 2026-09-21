@@ -204,7 +204,7 @@ def enter_user_context(
     """
     ws = ensure_workspace(user_id, base=workspaces_base)
     home_token = set_hermes_home_override(ws)
-    cwd_token = set_terminal_cwd_override(ws)
+    terminal_cwd_token = set_terminal_cwd_override(ws)
     workspace_token = _USER_WORKSPACE.set(ws)
     try:
         yield ws
@@ -212,5 +212,5 @@ def enter_user_context(
         # Reset in reverse order of acquisition to be tidy, though
         # ContextVar resets are independent.
         _USER_WORKSPACE.reset(workspace_token)
-        reset_terminal_cwd_override(cwd_token)
+        reset_terminal_cwd_override(terminal_cwd_token)
         reset_hermes_home_override(home_token)

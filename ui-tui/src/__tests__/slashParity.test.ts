@@ -2,9 +2,10 @@ import { execFileSync } from 'node:child_process'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { parseSlashCommand } from '@hermes/shared/slash'
 import { describe, expect, it } from 'vitest'
 
-import { SLASH_COMMANDS } from '../app/slash/registry.js'
+import { findSlashCommand, SLASH_COMMANDS } from '../app/slash/registry.js'
 
 type CommandRoute = 'fallback' | 'local' | 'native'
 
@@ -16,7 +17,8 @@ interface CommandRegistryLoad {
 const NATIVE_MUTATING_COMMANDS = new Set(['browser', 'busy', 'fast', 'reload-mcp', 'rollback', 'stop'])
 
 const MUTATING_COMMANDS = [
-  'background',
+  'bg',
+  'btw',
   'branch',
   'browser',
   'busy',
@@ -109,5 +111,39 @@ describe('slash parity matrix', () => {
       expect(routes[name], `missing command in registry: ${name}`).toBeDefined()
       expect(routes[name], `mutating command must not fallback: ${name}`).not.toBe('fallback')
     }
+  })
+
+  it('/q alias resolves to queue, not quit (#31983)', () => {
+    // Regression for #31983: the TUI `quit` command used to carry alias `q`,
+    // which collided with the Python-side `/queue` alias. TUI-local commands
+    // dispatch before the backend, so `/q` resolved to /quit (session.die)
+    // instead of queueing a prompt.
+    const cmd = findSlashCommand('q')
+    expect(cmd, '/q must resolve to a command').toBeDefined()
+    expect(cmd!.name).toBe('queue')
+  })
+})
+
+describe('parseSlashCommand argument fidelity', () => {
+  it('keeps a multi-line argument byte-for-byte', () => {
+    const arg = 'first line\nsecond line\n\n  indented tail'
+
+    expect(parseSlashCommand(`/pr-triage ${arg}`)).toEqual({
+      arg,
+      name: 'pr-triage'
+    })
+  })
+
+  it('preserves runs of spaces inside the argument', () => {
+    expect(parseSlashCommand('/goal ship   it').arg).toBe('ship   it')
+  })
+
+  it('still splits the command name off a single separator', () => {
+    expect(parseSlashCommand('/cron add daily')).toEqual({
+      arg: 'add daily',
+      name: 'cron'
+    })
+    expect(parseSlashCommand('/exit')).toEqual({ arg: '', name: 'exit' })
+    expect(parseSlashCommand('/exit ')).toEqual({ arg: '', name: 'exit' })
   })
 })

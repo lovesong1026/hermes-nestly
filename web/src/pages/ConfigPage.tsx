@@ -38,19 +38,20 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { getNestedValue, setNestedValue } from "@/lib/nested";
-import { useToast } from "@/hooks/useToast";
-import { Toast } from "@/components/Toast";
+import { useToast } from "@nous-research/ui/hooks/use-toast";
+import { Toast } from "@nous-research/ui/ui/components/toast";
 import { AutoField } from "@/components/AutoField";
 import { Button } from "@nous-research/ui/ui/components/button";
 import { ListItem } from "@nous-research/ui/ui/components/list-item";
 import { Spinner } from "@nous-research/ui/ui/components/spinner";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@nous-research/ui/ui/components/card";
+import { ConfirmDialog } from "@nous-research/ui/ui/components/confirm-dialog";
+import { Input } from "@nous-research/ui/ui/components/input";
 import { Badge } from "@nous-research/ui/ui/components/badge";
 import { useI18n } from "@/i18n";
 import { usePageHeader } from "@/contexts/usePageHeader";
 import { PluginSlot } from "@/plugins";
+import { errorMessage } from "@/lib/api-error";
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -169,7 +170,16 @@ export default function ConfigPage() {
     api
       .getSchema()
       .then((resp) => {
-        setSchema(resp.fields as Record<string, Record<string, unknown>>);
+        // memory.provider has a dedicated management UI on the Plugins page
+        // (provider cards + guided setup/switch flow). Hide it from the
+        // generic config form so the two surfaces don't fight; the schema
+        // keeps the field for other consumers (Desktop settings).
+        const fields = { ...resp.fields } as Record<
+          string,
+          Record<string, unknown>
+        >;
+        delete fields["memory.provider"];
+        setSchema(fields);
         setCategoryOrder(resp.category_order ?? []);
       })
       .catch(() => {});
@@ -177,9 +187,19 @@ export default function ConfigPage() {
       .getDefaults()
       .then(setDefaults)
       .catch(() => {});
+    // getConfigRaw is profile-scoped (fetchJSON appends ?profile=), so its
+    // `path` reflects the switched profile's config.yaml. /api/status's
+    // config_path is machine-global (the dashboard's own profile) — wrong
+    // header under the global profile switcher, so it's only a fallback.
+    api
+      .getConfigRaw()
+      .then((resp) => {
+        if (resp.path) setConfigPath(resp.path);
+      })
+      .catch(() => {});
     api
       .getStatus()
-      .then((resp) => setConfigPath(resp.config_path))
+      .then((resp) => setConfigPath((prev) => prev ?? resp.config_path))
       .catch(() => {});
   }, []);
 
@@ -264,7 +284,7 @@ export default function ConfigPage() {
       await api.saveConfig(config);
       showToast(t.config.configSaved, "success");
     } catch (e) {
-      showToast(`${t.config.failedToSave}: ${e}`, "error");
+      showToast(`${t.config.failedToSave}: ${errorMessage(e)}`, "error");
     } finally {
       setSaving(false);
     }
@@ -280,7 +300,7 @@ export default function ConfigPage() {
         .then(setConfig)
         .catch(() => {});
     } catch (e) {
-      showToast(`${t.config.failedToSaveYaml}: ${e}`, "error");
+      showToast(`${t.config.failedToSaveYaml}: ${errorMessage(e)}`, "error");
     } finally {
       setYamlSaving(false);
     }
